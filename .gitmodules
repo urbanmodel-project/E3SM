@@ -84,3 +84,6 @@
 	url = git@github.com:E3SM-Project/giac
 	branch = aldivi/iac_gcam6_merge_co2
 
+[submodule "components/elm/src/external_models/urbanxx"]
+	path = components/elm/src/external_models/urbanxx
+	url = git@github.com:urbanmodel-project/urbanxx.git
