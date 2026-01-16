@@ -252,6 +252,96 @@ contains
   end subroutine SetHeightParameters
 
   !-----------------------------------------------------------------------
+  subroutine SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    !
+    implicit none
+    !
+    type(UrbanType)        , intent(in) :: urban
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+    type(urbanparams_type) , intent(in) :: urbanparams_vars
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l, iband, itype, idx
+    integer(c_int)                       :: numBands, numTypes, totalSize3D
+    integer(c_int), dimension(3)         :: size3D
+    real(c_double) , allocatable, target :: albedoPerviousRoad(:)
+    real(c_double) , allocatable, target :: albedoImperviousRoad(:)
+    real(c_double) , allocatable, target :: albedoSunlitWall(:)
+    real(c_double) , allocatable, target :: albedoShadedWall(:)
+    real(c_double) , allocatable, target :: albedoRoof(:)
+
+    associate(                                                    &
+         alb_roof_dir       => urbanparams_vars%alb_roof_dir    , & ! Input: [real(r8) (:,:)] direct roof albedo
+         alb_roof_dif       => urbanparams_vars%alb_roof_dif    , & ! Input: [real(r8) (:,:)] diffuse roof albedo
+         alb_improad_dir    => urbanparams_vars%alb_improad_dir , & ! Input: [real(r8) (:,:)] direct impervious road albedo
+         alb_improad_dif    => urbanparams_vars%alb_improad_dif , & ! Input: [real(r8) (:,:)] diffuse imprevious road albedo
+         alb_perroad_dir    => urbanparams_vars%alb_perroad_dir , & ! Input: [real(r8) (:,:)] direct pervious road albedo
+         alb_perroad_dif    => urbanparams_vars%alb_perroad_dif , & ! Input: [real(r8) (:,:)] diffuse pervious road albedo
+         alb_wall_dir       => urbanparams_vars%alb_wall_dir    , & ! Input: [real(r8) (:,:)] direct wall albedo
+         alb_wall_dif       => urbanparams_vars%alb_wall_dif      & ! Input: [real(r8) (:,:)] diffuse wall albedo
+         )
+
+      numBands = 2  ! VIS, NIR
+      numTypes = 2  ! Direct, Diffuse
+      size3D = [num_urbanl, numBands, numTypes]
+      totalSize3D = num_urbanl * numBands * numTypes
+
+      allocate(albedoPerviousRoad(totalSize3D))
+      allocate(albedoImperviousRoad(totalSize3D))
+      allocate(albedoSunlitWall(totalSize3D))
+      allocate(albedoShadedWall(totalSize3D))
+      allocate(albedoRoof(totalSize3D))
+
+      ! Fill arrays using same indexing as C: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
+      ! itype = 0 corresponds to diffuse (*_dif), itype = 1 corresponds to direct (*_dir)
+      ! Note: Fortran arrays are 1-indexed, so we adjust accordingly
+      do fl = 1, num_urbanl
+        l = filter_urbanl(fl)
+        do iband = 0, numBands - 1
+          ! itype = 0: diffuse
+          idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
+          albedoPerviousRoad(idx) = alb_perroad_dif(l, iband+1)
+          albedoImperviousRoad(idx) = alb_improad_dif(l, iband+1)
+          albedoSunlitWall(idx) = alb_wall_dif(l, iband+1)
+          albedoShadedWall(idx) = alb_wall_dif(l, iband+1)
+          albedoRoof(idx) = alb_roof_dif(l, iband+1)
+          
+          ! itype = 1: direct
+          idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
+          albedoPerviousRoad(idx) = alb_perroad_dir(l, iband+1)
+          albedoImperviousRoad(idx) = alb_improad_dir(l, iband+1)
+          albedoSunlitWall(idx) = alb_wall_dir(l, iband+1)
+          albedoShadedWall(idx) = alb_wall_dir(l, iband+1)
+          albedoRoof(idx) = alb_roof_dir(l, iband+1)
+        end do
+      end do
+
+      call UrbanSetAlbedoPerviousRoad(urban, c_loc(albedoPerviousRoad), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAlbedoImperviousRoad(urban, c_loc(albedoImperviousRoad), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAlbedoSunlitWall(urban, c_loc(albedoSunlitWall), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAlbedoShadedWall(urban, c_loc(albedoShadedWall), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAlbedoRoof(urban, c_loc(albedoRoof), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(*,*) 'Set albedo values for all surfaces'
+      end if
+
+      deallocate(albedoPerviousRoad)
+      deallocate(albedoImperviousRoad)
+      deallocate(albedoSunlitWall)
+      deallocate(albedoShadedWall)
+      deallocate(albedoRoof)
+    end associate
+
+  end subroutine SetAlbedo
+
+  !-----------------------------------------------------------------------
   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
        urbanparams_vars, frictionvel_vars)
     !
@@ -269,6 +359,7 @@ contains
     call SetWtRoof(urban, num_urbanl, filter_urbanl)
     call SetHeightParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
          urbanparams_vars, frictionvel_vars)
+    call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
 
   end subroutine SetUrbanParameters
 
