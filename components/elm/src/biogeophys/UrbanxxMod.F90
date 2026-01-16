@@ -404,6 +404,122 @@ contains
   end subroutine SetEmissivity
 
   !-----------------------------------------------------------------------
+  subroutine SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    !
+    implicit none
+    !
+    type(UrbanType)        , intent(in) :: urban
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+    type(urbanparams_type) , intent(in) :: urbanparams_vars
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: tkRoad(:)
+    real(c_double) , allocatable, target :: tkWall(:)
+    real(c_double) , allocatable, target :: tkRoof(:)
+
+    associate(                                           &
+         tk_wall      => urbanparams_vars%tk_wall      , & ! Input: [real(r8) (:,:)] thermal conductivity of urban wall
+         tk_roof      => urbanparams_vars%tk_roof      , & ! Input: [real(r8) (:,:)] thermal conductivity of urban roof
+         tk_improad   => urbanparams_vars%tk_improad     & ! Input: [real(r8) (:,:)] thermal conductivity of urban impervious road
+         )
+
+      allocate(tkRoad(num_urbanl))
+      allocate(tkWall(num_urbanl))
+      allocate(tkRoof(num_urbanl))
+
+      ! URBANXX_FIX_ME: Currently using only first layer values.
+      ! ELM has multi-layer thermal conductivity data (tk_wall, tk_roof, tk_improad are dimensioned as [landunit, nlevurb]).
+      ! Urban++ may need to be updated to accept multi-layer thermal properties.
+      do fl = 1, num_urbanl
+        l = filter_urbanl(fl)
+        tkRoad(fl) = tk_improad(l, 1)
+        tkWall(fl) = tk_wall(l, 1)
+        tkRoof(fl) = tk_roof(l, 1)
+      end do
+
+      call UrbanSetThermalConductivityRoad(urban, c_loc(tkRoad), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetThermalConductivityWall(urban, c_loc(tkWall), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetThermalConductivityRoof(urban, c_loc(tkRoof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(iulog,*) 'Set thermal conductivity values for all surfaces'
+         write(iulog,*) 'URBANXX_FIX_ME: Only using first layer of multi-layer thermal conductivity data'
+      end if
+
+      deallocate(tkRoad)
+      deallocate(tkWall)
+      deallocate(tkRoof)
+    end associate
+
+  end subroutine SetThermalConductivity
+
+  !-----------------------------------------------------------------------
+  subroutine SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    !
+    implicit none
+    !
+    type(UrbanType)        , intent(in) :: urban
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+    type(urbanparams_type) , intent(in) :: urbanparams_vars
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: cvRoad(:)
+    real(c_double) , allocatable, target :: cvWall(:)
+    real(c_double) , allocatable, target :: cvRoof(:)
+
+    associate(                                           &
+         cv_wall      => urbanparams_vars%cv_wall      , & ! Input: [real(r8) (:,:)] heat capacity of urban wall
+         cv_roof      => urbanparams_vars%cv_roof      , & ! Input: [real(r8) (:,:)] heat capacity of urban roof
+         cv_improad   => urbanparams_vars%cv_improad     & ! Input: [real(r8) (:,:)] heat capacity of urban impervious road
+         )
+
+      allocate(cvRoad(num_urbanl))
+      allocate(cvWall(num_urbanl))
+      allocate(cvRoof(num_urbanl))
+
+      ! URBANXX_FIX_ME: Currently using only first layer values.
+      ! ELM has multi-layer heat capacity data (cv_wall, cv_roof, cv_improad are dimensioned as [landunit, nlevurb]).
+      ! Urban++ may need to be updated to accept multi-layer thermal properties.
+      do fl = 1, num_urbanl
+        l = filter_urbanl(fl)
+        cvRoad(fl) = cv_improad(l, 1)
+        cvWall(fl) = cv_wall(l, 1)
+        cvRoof(fl) = cv_roof(l, 1)
+      end do
+
+      call UrbanSetHeatCapacityRoad(urban, c_loc(cvRoad), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetHeatCapacityWall(urban, c_loc(cvWall), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetHeatCapacityRoof(urban, c_loc(cvRoof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(iulog,*) 'Set heat capacity values for all surfaces'
+         write(iulog,*) 'URBANXX_FIX_ME: Only using first layer of multi-layer heat capacity data'
+      end if
+
+      deallocate(cvRoad)
+      deallocate(cvWall)
+      deallocate(cvRoof)
+    end associate
+
+  end subroutine SetHeatCapacity
+
+  !-----------------------------------------------------------------------
   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
        urbanparams_vars, frictionvel_vars)
     !
@@ -423,6 +539,8 @@ contains
          urbanparams_vars, frictionvel_vars)
     call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
     call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
 
   end subroutine SetUrbanParameters
 
