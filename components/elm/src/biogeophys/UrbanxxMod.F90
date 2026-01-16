@@ -342,6 +342,68 @@ contains
   end subroutine SetAlbedo
 
   !-----------------------------------------------------------------------
+  subroutine SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    !
+    implicit none
+    !
+    type(UrbanType)        , intent(in) :: urban
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+    type(urbanparams_type) , intent(in) :: urbanparams_vars
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: emissivityPerviousRoad(:)
+    real(c_double) , allocatable, target :: emissivityImperviousRoad(:)
+    real(c_double) , allocatable, target :: emissivityWall(:)
+    real(c_double) , allocatable, target :: emissivityRoof(:)
+
+    associate(                                               &
+         em_roof            => urbanparams_vars%em_roof    , & ! Input: [real(r8) (:)] roof emissivity
+         em_improad         => urbanparams_vars%em_improad , & ! Input: [real(r8) (:)] impervious road emissivity
+         em_perroad         => urbanparams_vars%em_perroad , & ! Input: [real(r8) (:)] pervious road emissivity
+         em_wall            => urbanparams_vars%em_wall      & ! Input: [real(r8) (:)] wall emissivity
+         )
+
+      allocate(emissivityPerviousRoad(num_urbanl))
+      allocate(emissivityImperviousRoad(num_urbanl))
+      allocate(emissivityWall(num_urbanl))
+      allocate(emissivityRoof(num_urbanl))
+
+      do fl = 1, num_urbanl
+        l = filter_urbanl(fl)
+        emissivityPerviousRoad(fl) = em_perroad(l)
+        emissivityImperviousRoad(fl) = em_improad(l)
+        emissivityWall(fl) = em_wall(l)
+        emissivityRoof(fl) = em_roof(l)
+      end do
+
+      call UrbanSetEmissivityPerviousRoad(urban, c_loc(emissivityPerviousRoad), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEmissivityImperviousRoad(urban, c_loc(emissivityImperviousRoad), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEmissivityWall(urban, c_loc(emissivityWall), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEmissivityRoof(urban, c_loc(emissivityRoof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(*,*) 'Set emissivity values for all surfaces'
+      end if
+
+      deallocate(emissivityPerviousRoad)
+      deallocate(emissivityImperviousRoad)
+      deallocate(emissivityWall)
+      deallocate(emissivityRoof)
+    end associate
+
+  end subroutine SetEmissivity
+
+  !-----------------------------------------------------------------------
   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
        urbanparams_vars, frictionvel_vars)
     !
@@ -360,6 +422,7 @@ contains
     call SetHeightParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
          urbanparams_vars, frictionvel_vars)
     call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
 
   end subroutine SetUrbanParameters
 
