@@ -100,6 +100,42 @@ contains
   end subroutine SetCanyonHwr
 
   !-----------------------------------------------------------------------
+  subroutine SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
+    !
+    implicit none
+    !
+    type(UrbanType) , intent(in)         :: urban
+    integer(c_int)  , intent(in)         :: num_urbanl
+    integer         , intent(in)         :: filter_urbanl(:) ! urban landunit filter
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: fracPervRoadOfTotalRoad(:)
+
+    associate(                           &
+         wtroad_perv => lun_pp%wtroad_perv & ! Input:  [real(r8) (:)   ]  fraction of pervious road w.r.t. total road
+         )
+
+      allocate(fracPervRoadOfTotalRoad(num_urbanl))
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         fracPervRoadOfTotalRoad(fl) = lun_pp%wtroad_perv(l)
+      end do
+
+      call UrbanSetFracPervRoadOfTotalRoad(urban, c_loc(fracPervRoadOfTotalRoad), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(*,*) 'Set fraction of pervious road w.r.t. total road'
+      end if
+
+      deallocate(fracPervRoadOfTotalRoad)
+    end associate
+
+  end subroutine SetFracPervRoadOfTotalRoad
+
+  !-----------------------------------------------------------------------
   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl)
     !
     implicit none
@@ -109,6 +145,7 @@ contains
     integer        , intent(in)    :: filter_urbanl(:) ! urban landunit filter
 
     call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
+    call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
 
   end subroutine SetUrbanParameters
 
