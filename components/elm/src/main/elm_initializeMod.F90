@@ -1179,11 +1179,15 @@ contains
     use ExternalModelInterfaceMod, only : EMI_Init_EM
     use ExternalModelConstants   , only : EM_ID_VSFM
     use ExternalModelConstants   , only : EM_ID_PTM
+    use filterMod                , only : filter_inactive_and_active
+    use UrbanxxMod               , only : urbanxx_initialize
 
     implicit none
 
     type(bounds_type) :: bounds_proc
+    type(bounds_type) :: bounds_clump            ! clump bounds
     logical           :: restart_vsfm          ! does VSFM need to be restarted
+    integer           :: nc, nclumps
 
     call t_startf('elm_init3')
 
@@ -1228,6 +1232,19 @@ contains
     if (use_petsc_thermal_model) then
        call EMI_Init_EM(EM_ID_PTM)
     endif
+
+    nclumps = get_proc_clumps()
+    do nc = 1,nclumps
+      call get_clump_bounds(nc, bounds_clump)
+      call urbanxx_initialize(bounds_clump, &
+                  filter_inactive_and_active(nc)%num_urbanl, &
+                  filter_inactive_and_active(nc)%urbanl,     &
+                  filter_inactive_and_active(nc)%num_urbanc, &
+                  filter_inactive_and_active(nc)%urbanc,     &
+                  filter_inactive_and_active(nc)%num_urbanp, &
+                  filter_inactive_and_active(nc)%urbanp,     &
+                  urbanparams_vars, solarabs_vars, surfalb_vars)
+    end do
 
     call t_stopf('elm_init3')
 
