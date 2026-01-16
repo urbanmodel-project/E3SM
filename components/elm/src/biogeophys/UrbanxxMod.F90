@@ -136,6 +136,42 @@ contains
   end subroutine SetFracPervRoadOfTotalRoad
 
   !-----------------------------------------------------------------------
+  subroutine SetWtRoof(urban, num_urbanl, filter_urbanl)
+    !
+    implicit none
+    !
+    type(UrbanType) , intent(in)         :: urban
+    integer(c_int)  , intent(in)         :: num_urbanl
+    integer         , intent(in)         :: filter_urbanl(:) ! urban landunit filter
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: wtRoof(:)
+
+    associate(                              &
+         wtlunit_roof => lun_pp%wtlunit_roof & ! Input:  [real(r8) (:)   ]  roof weight
+         )
+
+      allocate(wtRoof(num_urbanl))
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         wtRoof(fl) = lun_pp%wtlunit_roof(l)
+      end do
+
+      call UrbanSetWtRoof(urban, c_loc(wtRoof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(*,*) 'Set roof weight'
+      end if
+
+      deallocate(wtRoof)
+    end associate
+
+  end subroutine SetWtRoof
+
+  !-----------------------------------------------------------------------
   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl)
     !
     implicit none
@@ -146,6 +182,7 @@ contains
 
     call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
     call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
+    call SetWtRoof(urban, num_urbanl, filter_urbanl)
 
   end subroutine SetUrbanParameters
 
