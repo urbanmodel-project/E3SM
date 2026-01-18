@@ -88,7 +88,7 @@ contains
     associate(                           &
          canyon_hwr => lun_pp%canyon_hwr & ! Input:  [real(r8) (:)   ]  ratio of building height to street width
          )
-      
+
       allocate(canyonHwr(num_urbanl))
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
@@ -221,11 +221,11 @@ contains
       ! Extract values from patches to landunits - use first urban patch for each landunit
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
-         forcHgtT(fl) = forc_hgt_t_patch(lun_pp%pfti(l))
-         forcHgtU(fl) = forc_hgt_u_patch(lun_pp%pfti(l))
-         zDTown(fl) = z_d_town(l)
-         z0Town(fl) = z_0_town(l)
-         htRoof(fl) = ht_roof(l)
+         forcHgtT(fl)      = forc_hgt_t_patch(lun_pp%pfti(l))
+         forcHgtU(fl)      = forc_hgt_u_patch(lun_pp%pfti(l))
+         zDTown(fl)        = z_d_town(l)
+         z0Town(fl)        = z_0_town(l)
+         htRoof(fl)        = ht_roof(l)
          windHgtCanyon(fl) = wind_hgt_canyon(l)
       end do
 
@@ -300,24 +300,24 @@ contains
       ! itype = 0 corresponds to diffuse (*_dif), itype = 1 corresponds to direct (*_dir)
       ! Note: Fortran arrays are 1-indexed, so we adjust accordingly
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        do iband = 0, numBands - 1
-          ! itype = 0: diffuse
-          idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
-          albedoPerviousRoad(idx) = alb_perroad_dif(l, iband+1)
-          albedoImperviousRoad(idx) = alb_improad_dif(l, iband+1)
-          albedoSunlitWall(idx) = alb_wall_dif(l, iband+1)
-          albedoShadedWall(idx) = alb_wall_dif(l, iband+1)
-          albedoRoof(idx) = alb_roof_dif(l, iband+1)
-          
-          ! itype = 1: direct
-          idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
-          albedoPerviousRoad(idx) = alb_perroad_dir(l, iband+1)
-          albedoImperviousRoad(idx) = alb_improad_dir(l, iband+1)
-          albedoSunlitWall(idx) = alb_wall_dir(l, iband+1)
-          albedoShadedWall(idx) = alb_wall_dir(l, iband+1)
-          albedoRoof(idx) = alb_roof_dir(l, iband+1)
-        end do
+         l = filter_urbanl(fl)
+         do iband = 0, numBands - 1
+            ! itype = 0: diffuse
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
+            albedoPerviousRoad(idx)   = alb_perroad_dif(l, iband+1)
+            albedoImperviousRoad(idx) = alb_improad_dif(l, iband+1)
+            albedoSunlitWall(idx)     = alb_wall_dif(l, iband+1)
+            albedoShadedWall(idx)     = alb_wall_dif(l, iband+1)
+            albedoRoof(idx)           = alb_roof_dif(l, iband+1)
+
+            ! itype = 1: direct
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
+            albedoPerviousRoad(idx)   = alb_perroad_dir(l, iband+1)
+            albedoImperviousRoad(idx) = alb_improad_dir(l, iband+1)
+            albedoSunlitWall(idx)     = alb_wall_dir(l, iband+1)
+            albedoShadedWall(idx)     = alb_wall_dir(l, iband+1)
+            albedoRoof(idx)           = alb_roof_dir(l, iband+1)
+         end do
       end do
 
       call UrbanSetAlbedoPerviousRoad(urban, c_loc(albedoPerviousRoad), size3D, status)
@@ -361,11 +361,11 @@ contains
     real(c_double) , allocatable, target :: emissivityWall(:)
     real(c_double) , allocatable, target :: emissivityRoof(:)
 
-    associate(                                               &
-         em_roof            => urbanparams_vars%em_roof    , & ! Input: [real(r8) (:)] roof emissivity
-         em_improad         => urbanparams_vars%em_improad , & ! Input: [real(r8) (:)] impervious road emissivity
-         em_perroad         => urbanparams_vars%em_perroad , & ! Input: [real(r8) (:)] pervious road emissivity
-         em_wall            => urbanparams_vars%em_wall      & ! Input: [real(r8) (:)] wall emissivity
+    associate(                                       &
+         em_roof    => urbanparams_vars%em_roof    , & ! Input: [real(r8) (:)] roof emissivity
+         em_improad => urbanparams_vars%em_improad , & ! Input: [real(r8) (:)] impervious road emissivity
+         em_perroad => urbanparams_vars%em_perroad , & ! Input: [real(r8) (:)] pervious road emissivity
+         em_wall    => urbanparams_vars%em_wall      & ! Input: [real(r8) (:)] wall emissivity
          )
 
       allocate(emissivityPerviousRoad(num_urbanl))
@@ -374,11 +374,11 @@ contains
       allocate(emissivityRoof(num_urbanl))
 
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        emissivityPerviousRoad(fl) = em_perroad(l)
-        emissivityImperviousRoad(fl) = em_improad(l)
-        emissivityWall(fl) = em_wall(l)
-        emissivityRoof(fl) = em_roof(l)
+         l = filter_urbanl(fl)
+         emissivityPerviousRoad(fl)   = em_perroad(l)
+         emissivityImperviousRoad(fl) = em_improad(l)
+         emissivityWall(fl)           = em_wall(l)
+         emissivityRoof(fl)           = em_roof(l)
       end do
 
       call UrbanSetEmissivityPerviousRoad(urban, c_loc(emissivityPerviousRoad), &
@@ -422,10 +422,10 @@ contains
     real(c_double) , allocatable, target :: tkWall(:)
     real(c_double) , allocatable, target :: tkRoof(:)
 
-    associate(                                           &
-         tk_wall      => urbanparams_vars%tk_wall      , & ! Input: [real(r8) (:,:)] thermal conductivity of urban wall
-         tk_roof      => urbanparams_vars%tk_roof      , & ! Input: [real(r8) (:,:)] thermal conductivity of urban roof
-         tk_improad   => urbanparams_vars%tk_improad     & ! Input: [real(r8) (:,:)] thermal conductivity of urban impervious road
+    associate(                                       &
+         tk_wall    => urbanparams_vars%tk_wall    , & ! Input: [real(r8) (:,:)] thermal conductivity of urban wall
+         tk_roof    => urbanparams_vars%tk_roof    , & ! Input: [real(r8) (:,:)] thermal conductivity of urban roof
+         tk_improad => urbanparams_vars%tk_improad   & ! Input: [real(r8) (:,:)] thermal conductivity of urban impervious road
          )
 
       allocate(tkRoad(num_urbanl))
@@ -436,10 +436,10 @@ contains
       ! ELM has multi-layer thermal conductivity data (tk_wall, tk_roof, tk_improad are dimensioned as [landunit, nlevurb]).
       ! Urban++ may need to be updated to accept multi-layer thermal properties.
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        tkRoad(fl) = tk_improad(l, 1)
-        tkWall(fl) = tk_wall(l, 1)
-        tkRoof(fl) = tk_roof(l, 1)
+         l = filter_urbanl(fl)
+         tkRoad(fl) = tk_improad(l, 1)
+         tkWall(fl) = tk_wall(l, 1)
+         tkRoof(fl) = tk_roof(l, 1)
       end do
 
       call UrbanSetThermalConductivityRoad(urban, c_loc(tkRoad), &
@@ -494,10 +494,10 @@ contains
       ! ELM has multi-layer heat capacity data (cv_wall, cv_roof, cv_improad are dimensioned as [landunit, nlevurb]).
       ! Urban++ may need to be updated to accept multi-layer thermal properties.
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        cvRoad(fl) = cv_improad(l, 1)
-        cvWall(fl) = cv_wall(l, 1)
-        cvRoof(fl) = cv_roof(l, 1)
+         l = filter_urbanl(fl)
+         cvRoad(fl) = cv_improad(l, 1)
+         cvWall(fl) = cv_wall(l, 1)
+         cvRoof(fl) = cv_roof(l, 1)
       end do
 
       call UrbanSetHeatCapacityRoad(urban, c_loc(cvRoad), &
@@ -527,10 +527,10 @@ contains
     !
     implicit none
     !
-    type(UrbanType)                  , intent(in) :: urban
-    integer(c_int)                   , intent(in) :: num_urbanl
-    integer                          , intent(in) :: filter_urbanl(:)         ! urban landunit filter
-    type(surfalb_type)               , intent(in) :: surfalb_vars
+    type(UrbanType)    , intent(in) :: urban
+    integer(c_int)     , intent(in) :: num_urbanl
+    integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
+    type(surfalb_type) , intent(in) :: surfalb_vars
     !
     integer(c_int)                       :: status
     integer                              :: fl, l, t, iband, itype, idx
@@ -549,18 +549,18 @@ contains
     real(c_double) , allocatable, target :: atmShortwave(:)
 
     associate(                                                        &
-         forc_t              => top_as%tbot                         , & ! Input: [real(r8) (:)] atmospheric temperature (K)
-         forc_th             => top_as%thbot                        , & ! Input: [real(r8) (:)] atmospheric potential temperature (K)
-         forc_rho            => top_as%rhobot                       , & ! Input: [real(r8) (:)] air density (kg/m**3)
-         forc_q              => top_as%qbot                         , & ! Input: [real(r8) (:)] atmospheric specific humidity (kg/kg)
-         forc_pbot           => top_as%pbot                         , & ! Input: [real(r8) (:)] atmospheric pressure (Pa)
-         forc_u              => top_as%ubot                         , & ! Input: [real(r8) (:)] atmospheric wind speed in east direction (m/s)
-         forc_v              => top_as%vbot                         , & ! Input: [real(r8) (:)] atmospheric wind speed in north direction (m/s)
-         forc_lwrad          => top_af%lwrad_pp                     , & ! Input: [real(r8) (:)] downward infrared (longwave) radiation under PP (W/m**2)
-         forc_snow           => top_af%snow                         , & ! Input: [real(r8) (:)] downscaled snow
-         forc_solad          => top_af%solad_pp                     , & ! Input: [real(r8) (:,:)] direct beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
-         forc_solai          => top_af%solai_pp                     , & ! Input: [real(r8) (:,:)] diffuse beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
-         coli                => lun_pp%coli                           & ! Input: [integer (:)] beginning column index for landunit
+         forc_t     => top_as%tbot     , & ! Input: [real(r8) (:)] atmospheric temperature (K)
+         forc_th    => top_as%thbot    , & ! Input: [real(r8) (:)] atmospheric potential temperature (K)
+         forc_rho   => top_as%rhobot   , & ! Input: [real(r8) (:)] air density (kg/m**3)
+         forc_q     => top_as%qbot     , & ! Input: [real(r8) (:)] atmospheric specific humidity (kg/kg)
+         forc_pbot  => top_as%pbot     , & ! Input: [real(r8) (:)] atmospheric pressure (Pa)
+         forc_u     => top_as%ubot     , & ! Input: [real(r8) (:)] atmospheric wind speed in east direction (m/s)
+         forc_v     => top_as%vbot     , & ! Input: [real(r8) (:)] atmospheric wind speed in north direction (m/s)
+         forc_lwrad => top_af%lwrad_pp , & ! Input: [real(r8) (:)] downward infrared (longwave) radiation under PP (W/m**2)
+         forc_snow  => top_af%snow     , & ! Input: [real(r8) (:)] downscaled snow
+         forc_solad => top_af%solad_pp , & ! Input: [real(r8) (:,:)] direct beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
+         forc_solai => top_af%solai_pp , & ! Input: [real(r8) (:,:)] diffuse beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
+         coli       => lun_pp%coli                           & ! Input: [integer (:)] beginning column index for landunit
          )
 
       ! Allocate arrays
@@ -581,36 +581,36 @@ contains
 
       ! Fill arrays with values from ELM data structures
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        t = lun_pp%topounit(l)
-        
-        atmTemp(fl) = forc_t(t)
-        atmPotTemp(fl) = forc_th(t)
-        atmRho(fl) = forc_rho(t)
-        atmSpcHumd(fl) = forc_q(t)
-        atmPress(fl) = forc_pbot(t)
-        atmWindU(fl) = forc_u(t)
-        atmWindV(fl) = forc_v(t)
-        atmCoszen(fl) = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
-        atmFracSnow(fl) = forc_snow(t)
-        atmLongwave(fl) = forc_lwrad(t)
+         l = filter_urbanl(fl)
+         t = lun_pp%topounit(l)
+
+         atmTemp(fl)     = forc_t(t)
+         atmPotTemp(fl)  = forc_th(t)
+         atmRho(fl)      = forc_rho(t)
+         atmSpcHumd(fl)  = forc_q(t)
+         atmPress(fl)    = forc_pbot(t)
+         atmWindU(fl)    = forc_u(t)
+         atmWindV(fl)    = forc_v(t)
+         atmCoszen(fl)   = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
+         atmFracSnow(fl) = forc_snow(t)
+         atmLongwave(fl) = forc_lwrad(t)
       end do
 
       ! Fill shortwave arrays with direct and diffuse for VIS and NIR bands
       ! Indexing: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
       ! itype = 0: diffuse, itype = 1: direct
       do fl = 1, num_urbanl
-        l = filter_urbanl(fl)
-        t = lun_pp%topounit(l)
-        do iband = 0, numBands - 1
-          ! itype = 0: diffuse
-          idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
-          atmShortwave(idx) = forc_solai(t, iband+1)
-          
-          ! itype = 1: direct
-          idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
-          atmShortwave(idx) = forc_solad(t, iband+1)
-        end do
+         l = filter_urbanl(fl)
+         t = lun_pp%topounit(l)
+         do iband = 0, numBands - 1
+            ! itype = 0: diffuse
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
+            atmShortwave(idx) = forc_solai(t, iband+1)
+
+            ! itype = 1: direct
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
+            atmShortwave(idx) = forc_solad(t, iband+1)
+         end do
       end do
 
       ! Set atmospheric forcing
