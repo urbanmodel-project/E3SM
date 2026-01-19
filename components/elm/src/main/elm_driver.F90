@@ -185,6 +185,10 @@ module elm_driver
   use elm_varctl                  , only : use_finetop_rad
 
   use timeinfoMod
+  use UrbanxxMod                  , only : urbanxx_SetAtmosphericForcing
+  use UrbanxxMod                  , only : urbanxx_netShortwave
+  use UrbanxxMod                  , only : urbanxx_netLongwave
+  use UrbanxxMod                  , only : urbanxx_surfaceFluxes
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -756,6 +760,15 @@ contains
             atm2lnd_vars, urbanparams_vars, &
             solarabs_vars, surfalb_vars, energyflux_vars)
 
+        call urbanxx_SetAtmosphericForcing( &
+                  filter(nc)%num_urbanl, &
+                  filter(nc)%urbanl,     &
+                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+        call urbanxx_netLongwave( &
+                  filter(nc)%num_urbanl, &
+                  filter(nc)%urbanl,     &
+                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+
        call t_stopf('surfrad')
 
        ! ============================================================================
@@ -810,6 +823,10 @@ contains
             atm2lnd_vars, urbanparams_vars, soilstate_vars,  &
             frictionvel_vars, energyflux_vars)
        call t_stopf('uflux')
+       call urbanxx_surfaceFluxes( &
+                  filter(nc)%num_urbanl, &
+                  filter(nc)%urbanl,     &
+                  surfalb_vars, urbanparams_vars, frictionvel_vars)
 
        ! Fluxes for all lake landunits
 
@@ -1404,6 +1421,11 @@ contains
                   filter_inactive_and_active(nc)%urbanp,     &
                   urbanparams_vars, solarabs_vars, surfalb_vars)
              call t_stopf('urbsurfalb')
+
+             call urbanxx_netShortwave( &
+                  filter(nc)%num_urbanl, &
+                  filter(nc)%urbanl,     &
+                  surfalb_vars, urbanparams_vars, frictionvel_vars)
           end if
 
        end if
