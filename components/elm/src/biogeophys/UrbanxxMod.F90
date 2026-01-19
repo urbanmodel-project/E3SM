@@ -16,6 +16,7 @@ module UrbanxxMod
   use VegetationType       , only : veg_pp
   use FrictionVelocityType , only : frictionvel_type
   use TopounitDataType     , only : top_as, top_af
+  use ColumnDataType       , only : col_es, col_pp
 
   implicit none
 
@@ -28,7 +29,10 @@ module UrbanxxMod
   type(UrbanType) :: urbanxx
 
   public :: urbanxx_initialize
-
+  public :: urbanxx_SetAtmosphericForcing
+  public :: urbanxx_netLongwave
+  public :: urbanxx_netShortwave
+  public :: urbanxx_surfaceFluxes
 contains
 
   !-----------------------------------------------------------------------
@@ -67,7 +71,11 @@ contains
     call UrbanCreate(num_urbanl, urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-    call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, filter_urbanp, &
+    ! Initialize temperatures
+    call UrbanInitializeTemperature(urbanxx, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, &
          urbanparams_vars, frictionvel_vars)
 
   end subroutine urbanxx_initialize
@@ -181,7 +189,7 @@ contains
   end subroutine SetWtRoof
 
   !-----------------------------------------------------------------------
-  subroutine SetHeightParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
+  subroutine SetHeightParameters(urban, num_urbanl, filter_urbanl, &
        urbanparams_vars, frictionvel_vars)
     !
     implicit none
@@ -189,7 +197,6 @@ contains
     type(UrbanType)        , intent(in) :: urban
     integer(c_int)         , intent(in) :: num_urbanl
     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
-    integer                , intent(in) :: filter_urbanp(:) ! urban pft filter
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     type(frictionvel_type) , intent(in) :: frictionvel_vars
     !
@@ -267,7 +274,7 @@ contains
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     !
     integer(c_int)                       :: status
-    integer                              :: fl, l, iband, itype, idx
+    integer                              :: fl, l, iband, itype, count
     integer(c_int)                       :: totalSize3D
     integer(c_int), dimension(3)         :: size3D
     real(c_double) , allocatable, target :: albedoPerviousRoad(:)
@@ -299,26 +306,31 @@ contains
       ! Fill arrays using same indexing as C: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
       ! itype = 0 corresponds to diffuse (*_dif), itype = 1 corresponds to direct (*_dir)
       ! Note: Fortran arrays are 1-indexed, so we adjust accordingly
-      do fl = 1, num_urbanl
+      count = 0
+      do itype = 0, 1
+      do iband = 0, numBands - 1
+         do fl = 1, num_urbanl
          l = filter_urbanl(fl)
-         do iband = 0, numBands - 1
+         count = count + 1
+         if (itype == 0) then
             ! itype = 0: diffuse
-            idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
-            albedoPerviousRoad(idx)   = alb_perroad_dif(l, iband+1)
-            albedoImperviousRoad(idx) = alb_improad_dif(l, iband+1)
-            albedoSunlitWall(idx)     = alb_wall_dif(l, iband+1)
-            albedoShadedWall(idx)     = alb_wall_dif(l, iband+1)
-            albedoRoof(idx)           = alb_roof_dif(l, iband+1)
+            albedoPerviousRoad(count)   = alb_perroad_dif(l, iband+1)
+            albedoImperviousRoad(count) = alb_improad_dif(l, iband+1)
+            albedoSunlitWall(count)     = alb_wall_dif(l, iband+1)
+            albedoShadedWall(count)     = alb_wall_dif(l, iband+1)
+            albedoRoof(count)           = alb_roof_dif(l, iband+1)
 
+         else
             ! itype = 1: direct
-            idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
-            albedoPerviousRoad(idx)   = alb_perroad_dir(l, iband+1)
-            albedoImperviousRoad(idx) = alb_improad_dir(l, iband+1)
-            albedoSunlitWall(idx)     = alb_wall_dir(l, iband+1)
-            albedoShadedWall(idx)     = alb_wall_dir(l, iband+1)
-            albedoRoof(idx)           = alb_roof_dir(l, iband+1)
-         end do
-      end do
+            albedoPerviousRoad(count)   = alb_perroad_dir(l, iband+1)
+            albedoImperviousRoad(count) = alb_improad_dir(l, iband+1)
+            albedoSunlitWall(count)     = alb_wall_dir(l, iband+1)
+            albedoShadedWall(count)     = alb_wall_dir(l, iband+1)
+            albedoRoof(count)           = alb_roof_dir(l, iband+1)
+         endif
+         enddo
+      enddo
+      enddo
 
       call UrbanSetAlbedoPerviousRoad(urban, c_loc(albedoPerviousRoad), size3D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -523,14 +535,17 @@ contains
   end subroutine SetHeatCapacity
 
   !-----------------------------------------------------------------------
-  subroutine SetAtmosphericForcing(urban, num_urbanl, filter_urbanl, surfalb_vars)
+  subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, surfalb_vars, &
+         urbanparams_vars, frictionvel_vars)
     !
     implicit none
     !
-    type(UrbanType)    , intent(in) :: urban
     integer(c_int)     , intent(in) :: num_urbanl
     integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
     type(surfalb_type) , intent(in) :: surfalb_vars
+    type(urbanparams_type) , intent(in)    :: urbanparams_vars
+    type(frictionvel_type) , intent(in)    :: frictionvel_vars
+
     !
     integer(c_int)                       :: status
     integer                              :: fl, l, t, iband, itype, idx
@@ -614,32 +629,35 @@ contains
       end do
 
       ! Set atmospheric forcing
-      call UrbanSetAtmTemp(urban, c_loc(atmTemp), num_urbanl, status)
+      call UrbanSetAtmTemp(urbanxx, c_loc(atmTemp), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmPotTemp(urban, c_loc(atmPotTemp), num_urbanl, status)
+      call UrbanSetAtmPotTemp(urbanxx, c_loc(atmPotTemp), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmRho(urban, c_loc(atmRho), num_urbanl, status)
+      call UrbanSetAtmRho(urbanxx, c_loc(atmRho), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmSpcHumd(urban, c_loc(atmSpcHumd), num_urbanl, status)
+      call UrbanSetAtmSpcHumd(urbanxx, c_loc(atmSpcHumd), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmPress(urban, c_loc(atmPress), num_urbanl, status)
+      call UrbanSetAtmPress(urbanxx, c_loc(atmPress), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmWindU(urban, c_loc(atmWindU), num_urbanl, status)
+      call UrbanSetAtmWindU(urbanxx, c_loc(atmWindU), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmWindV(urban, c_loc(atmWindV), num_urbanl, status)
+      call UrbanSetAtmWindV(urbanxx, c_loc(atmWindV), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmCoszen(urban, c_loc(atmCoszen), num_urbanl, status)
+      call UrbanSetAtmCoszen(urbanxx, c_loc(atmCoszen), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmFracSnow(urban, c_loc(atmFracSnow), num_urbanl, status)
+      call UrbanSetAtmFracSnow(urbanxx, c_loc(atmFracSnow), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmLongwaveDown(urban, c_loc(atmLongwave), num_urbanl, status)
+      call UrbanSetAtmLongwaveDown(urbanxx, c_loc(atmLongwave), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetAtmShortwaveDown(urban, c_loc(atmShortwave), size3D, status)
+      call UrbanSetAtmShortwaveDown(urbanxx, c_loc(atmShortwave), size3D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       if (masterproc) then
          write(iulog,*) 'Set atmospheric forcing from ELM data structures'
       end if
+
+      call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
+         urbanparams_vars, frictionvel_vars)
 
       ! Free arrays
       deallocate(atmTemp)
@@ -655,31 +673,174 @@ contains
       deallocate(atmShortwave)
     end associate
 
-  end subroutine SetAtmosphericForcing
+  end subroutine urbanxx_SetAtmosphericForcing
 
   !-----------------------------------------------------------------------
-  subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
-       urbanparams_vars, frictionvel_vars)
+  subroutine urbanxx_netLongwave(num_urbanl, filter_urbanl, surfalb_vars, &
+         urbanparams_vars, frictionvel_vars)
+    !
+    use column_varcon       , only : icol_road_perv, icol_road_imperv
+    use column_varcon       , only : icol_roof, icol_sunwall, icol_shadewall
     !
     implicit none
     !
-    type(UrbanType)        , intent(inout) :: urban
-    integer(c_int)         , intent(in)    :: num_urbanl
-    integer                , intent(in)    :: filter_urbanl(:) ! urban landunit filter
-    integer                , intent(in)    :: filter_urbanp(:) ! urban pft filter
-    type(urbanparams_type) , intent(in)    :: urbanparams_vars
-    type(frictionvel_type) , intent(in)    :: frictionvel_vars
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:)         ! urban landunit filter
+    type(surfalb_type)     , intent(in) :: surfalb_vars
+    type(urbanparams_type) , intent(in) :: urbanparams_vars
+    type(frictionvel_type) , intent(in) :: frictionvel_vars
+    !
+    integer                              :: fl, l, c_start, c_end, c
+    integer(c_int)                       :: status
+    real(c_double) , allocatable, target :: t_roof(:)
+    real(c_double) , allocatable, target :: t_improad(:)
+    real(c_double) , allocatable, target :: t_perroad(:)
+    real(c_double) , allocatable, target :: t_sunwall(:)
+    real(c_double) , allocatable, target :: t_shadwall(:)
 
-    call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
-    call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
-    call SetWtRoof(urban, num_urbanl, filter_urbanl)
-    call SetHeightParameters(urban, num_urbanl, filter_urbanl, filter_urbanp, &
+    associate(                       &
+         ctype  =>    col_pp%itype , & ! Input:  [integer (:)    ]  column type
+         coli   =>    lun_pp%coli  , & ! Input:  [integer (:)    ]  beginning column index for landunit
+         colf   =>    lun_pp%colf  , & ! Input:  [integer (:)    ]  ending column index for landunit
+         t_grnd =>    col_es%t_grnd  & ! Input:  [real(r8) (:)   ]  ground temperature (K)
+         )
+
+      allocate(t_roof(num_urbanl))
+      allocate(t_improad(num_urbanl))
+      allocate(t_perroad(num_urbanl))
+      allocate(t_sunwall(num_urbanl))
+      allocate(t_shadwall(num_urbanl))
+
+      ! Extract surface temperatures from columns to landunits
+      ! For urban landunits, there are multiple columns per landunit representing different surfaces.
+      ! We extract temperatures based on column types.
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         c_start = coli(l)
+         c_end   = colf(l)
+
+         do c = c_start, c_end
+            select case (ctype(c))
+            case (icol_roof)  ! Roof
+               t_roof(fl) = t_grnd(c)
+            case (icol_road_imperv)  ! Impervious Road
+               t_improad(fl) = t_grnd(c)
+            case (icol_road_perv)  ! Pervious Road
+               t_perroad(fl) = t_grnd(c)
+            case (icol_sunwall)  ! Sunlit Wall
+               t_sunwall(fl) = t_grnd(c)
+            case (icol_shadewall)  ! Shaded Wall
+               t_shadwall(fl) = t_grnd(c)
+            case default
+               ! Do nothing for other types
+            end select
+         end do
+      end do
+
+      ! set surface temperatures in UrbanXX
+      call UrbanSetTemperatureRoof(urbanxx, c_loc(t_roof), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetTemperatureImperviousRoad(urbanxx, c_loc(t_improad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetTemperaturePerviousRoad(urbanxx, c_loc(t_perroad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetTemperatureSunlitWall(urbanxx, c_loc(t_sunwall), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetTemperatureShadedWall(urbanxx, c_loc(t_shadwall), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanComputeNetLongwave(urbanxx, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! Free arrays
+      deallocate(t_roof)
+      deallocate(t_improad)
+      deallocate(t_perroad)
+      deallocate(t_sunwall)
+      deallocate(t_shadwall)
+
+    end associate
+
+   end subroutine urbanxx_netLongwave
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_netShortwave(num_urbanl, filter_urbanl, surfalb_vars, &
          urbanparams_vars, frictionvel_vars)
-    call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
-    call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
-    call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
-    call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+    !
+    implicit none
+    !
+    integer(c_int)         , intent(in)  :: num_urbanl
+    integer                , intent(in)  :: filter_urbanl(:)         ! urban landunit filter
+    type(surfalb_type)     , intent(in)  :: surfalb_vars
+    type(urbanparams_type) , intent(in)  :: urbanparams_vars
+    type(frictionvel_type) , intent(in)  :: frictionvel_vars
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l
+    real(c_double) , allocatable, target :: atmCoszen(:)
 
-  end subroutine SetUrbanParameters
+    associate(                  &
+         coli =>    lun_pp%coli & ! Input:  [integer (:)    ]  beginning column index for landunit
+         )
+
+      allocate(atmCoszen(num_urbanl))
+      ! Fill arrays with values from ELM data structures
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         atmCoszen(fl)   = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
+      end do
+
+      call UrbanSetAtmCoszen(urbanxx, c_loc(atmCoszen), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanComputeNetShortwave(urbanxx, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      deallocate(atmCoszen)
+
+    end associate
+   end subroutine urbanxx_netShortwave
+
+   !-----------------------------------------------------------------------
+   subroutine urbanxx_surfaceFluxes(num_urbanl, filter_urbanl, surfalb_vars, &
+        urbanparams_vars, frictionvel_vars)
+     !
+     implicit none
+     !
+     integer(c_int)     , intent(in) :: num_urbanl
+     integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
+     type(surfalb_type) , intent(in) :: surfalb_vars
+     type(urbanparams_type) , intent(in)    :: urbanparams_vars
+     type(frictionvel_type) , intent(in)    :: frictionvel_vars
+     !
+     integer(c_int)                       :: status
+
+     call UrbanComputeSurfaceFluxes(urbanxx, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+   end subroutine urbanxx_surfaceFluxes
+
+   !-----------------------------------------------------------------------
+   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, &
+        urbanparams_vars, frictionvel_vars)
+     !
+     implicit none
+     !
+     type(UrbanType)        , intent(inout) :: urban
+     integer(c_int)         , intent(in)    :: num_urbanl
+     integer                , intent(in)    :: filter_urbanl(:) ! urban landunit filter
+     type(urbanparams_type) , intent(in)    :: urbanparams_vars
+     type(frictionvel_type) , intent(in)    :: frictionvel_vars
+
+     call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
+     call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
+     call SetWtRoof(urban, num_urbanl, filter_urbanl)
+     call SetHeightParameters(urban, num_urbanl, filter_urbanl, &
+          urbanparams_vars, frictionvel_vars)
+     call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+
+   end subroutine SetUrbanParameters
 
 end module UrbanxxMod
