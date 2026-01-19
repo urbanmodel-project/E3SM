@@ -306,31 +306,67 @@ contains
       ! Fill arrays using same indexing as C: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
       ! itype = 0 corresponds to diffuse (*_dif), itype = 1 corresponds to direct (*_dir)
       ! Note: Fortran arrays are 1-indexed, so we adjust accordingly
-      count = 0
-      do itype = 0, 1
-      do iband = 0, numBands - 1
-         do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         count = count + 1
-         if (itype == 0) then
-            ! itype = 0: diffuse
-            albedoPerviousRoad(count)   = alb_perroad_dif(l, iband+1)
-            albedoImperviousRoad(count) = alb_improad_dif(l, iband+1)
-            albedoSunlitWall(count)     = alb_wall_dif(l, iband+1)
-            albedoShadedWall(count)     = alb_wall_dif(l, iband+1)
-            albedoRoof(count)           = alb_roof_dif(l, iband+1)
+      !
+      ! In Urbanxx lib, the albedos are defined as following 3D: albedo(l, ib, itype)
+      
+      if (UrbanKokkosIsLayoutLeft()) then
 
-         else
-            ! itype = 1: direct
-            albedoPerviousRoad(count)   = alb_perroad_dir(l, iband+1)
-            albedoImperviousRoad(count) = alb_improad_dir(l, iband+1)
-            albedoSunlitWall(count)     = alb_wall_dir(l, iband+1)
-            albedoShadedWall(count)     = alb_wall_dir(l, iband+1)
-            albedoRoof(count)           = alb_roof_dir(l, iband+1)
-         endif
+         ! Kokkos layout is left: Thus, the 'l'-index will be incremented fastest
+
+         count = 0
+         do itype = 0, 1
+            do iband = 0, numBands - 1
+               do fl = 1, num_urbanl
+                  l = filter_urbanl(fl)
+                  count = count + 1
+                  if (itype == 0) then
+                     ! itype = 0: diffuse
+                     albedoPerviousRoad(count)   = alb_perroad_dif(l, iband+1)
+                     albedoImperviousRoad(count) = alb_improad_dif(l, iband+1)
+                     albedoSunlitWall(count)     = alb_wall_dif(l, iband+1)
+                     albedoShadedWall(count)     = alb_wall_dif(l, iband+1)
+                     albedoRoof(count)           = alb_roof_dif(l, iband+1)
+
+                  else
+                     ! itype = 1: direct
+                     albedoPerviousRoad(count)   = alb_perroad_dir(l, iband+1)
+                     albedoImperviousRoad(count) = alb_improad_dir(l, iband+1)
+                     albedoSunlitWall(count)     = alb_wall_dir(l, iband+1)
+                     albedoShadedWall(count)     = alb_wall_dir(l, iband+1)
+                     albedoRoof(count)           = alb_roof_dir(l, iband+1)
+                  endif
+               enddo
+            enddo
          enddo
-      enddo
-      enddo
+      else
+
+         ! Kokkos layout is right: Thus, the 'itype'-index will be incremented fastest
+
+         count = 0
+         do fl = 1, num_urbanl
+            l = filter_urbanl(fl)
+            do iband = 0, numBands - 1
+               do itype = 0, 1
+                  count = count + 1
+                  if (itype == 0) then
+                     ! itype = 0: diffuse
+                     albedoPerviousRoad(count)   = alb_perroad_dif(l, iband+1)
+                     albedoImperviousRoad(count) = alb_improad_dif(l, iband+1)
+                     albedoSunlitWall(count)     = alb_wall_dif(l, iband+1)
+                     albedoShadedWall(count)     = alb_wall_dif(l, iband+1)
+                     albedoRoof(count)           = alb_roof_dif(l, iband+1)
+                  else
+                     ! itype = 1: direct
+                     albedoPerviousRoad(count)   = alb_perroad_dir(l, iband+1)
+                     albedoImperviousRoad(count) = alb_improad_dir(l, iband+1)
+                     albedoSunlitWall(count)     = alb_wall_dir(l, iband+1)
+                     albedoShadedWall(count)     = alb_wall_dir(l, iband+1)
+                     albedoRoof(count)           = alb_roof_dir(l, iband+1)
+                  endif
+               enddo
+            enddo
+         enddo
+      end if
 
       call UrbanSetAlbedoPerviousRoad(urban, c_loc(albedoPerviousRoad), size3D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
