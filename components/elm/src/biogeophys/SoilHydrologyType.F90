@@ -70,6 +70,9 @@ Module SoilHydrologyType
 
      real(r8), pointer :: ar_col            (:,:)   => null()! col anisotropic ratio
 
+     real(r8), pointer :: clay              (:,:)   => null()! col clay fraction for each soil layer
+     real(r8), pointer :: sand              (:,:)   => null()! col sand fraction for each soil layer
+     real(r8), pointer :: om_frac           (:,:)   => null()! col organic matter fraction for each soil layer
    contains
 
      procedure, public  :: Init
@@ -163,6 +166,10 @@ contains
     allocate(this%pc                (begg:endg))                 ; this%pc                (:)     = spval
 
     allocate(this%ar_col            (begc:endc,nlevgrnd))        ; this%ar_col            (:,:)   = 25.0_r8
+
+    allocate(this%clay              (begc:endc,nlevgrnd))        ; this%clay              (:,:)   = spval
+    allocate(this%sand              (begc:endc,nlevgrnd))        ; this%sand              (:,:)   = spval
+    allocate(this%om_frac           (begc:endc,nlevgrnd))        ; this%om_frac           (:,:)   = spval
 
   end subroutine InitAllocate
 
@@ -508,6 +515,10 @@ contains
                    claycol(c,lev)    = clay
                    sandcol(c,lev)    = sand
                    om_fraccol(c,lev) = om_frac
+
+                   this%sand(c,lev)= sand
+                   this%clay(c,lev)= clay
+                   this%om_frac(c,lev)= om_frac
 
                    this%ar_col(c,lev)= clay
                 end do
