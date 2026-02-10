@@ -17,6 +17,8 @@ module UrbanxxMod
   use FrictionVelocityType , only : frictionvel_type
   use TopounitDataType     , only : top_as, top_af
   use ColumnDataType       , only : col_es, col_pp
+  use SoilStateType        , only : soilstate_type
+  use abortutils           , only : endrun
 
   implicit none
 
@@ -38,7 +40,8 @@ contains
   !-----------------------------------------------------------------------
   subroutine urbanxx_initialize(bounds, num_urbanl, filter_urbanl, &
        num_urbanc, filter_urbanc, num_urbanp, filter_urbanp, &
-       urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars)
+       urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars, &
+       soilstate_vars)
     implicit none
     !
     ! !ARGUMENTS:
@@ -53,6 +56,7 @@ contains
     type(solarabs_type)    , intent(in) :: solarabs_vars
     type(surfalb_type)     , intent(in) :: surfalb_vars
     type(frictionvel_type) , intent(in) :: frictionvel_vars
+    type(soilstate_type)   , intent(in) :: soilstate_vars
 
     integer :: status
 
@@ -71,12 +75,15 @@ contains
     call UrbanCreate(num_urbanl, urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-    ! Initialize temperatures
-    call UrbanInitializeTemperature(urbanxx, status)
-    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
     call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, &
-         urbanparams_vars, frictionvel_vars)
+         urbanparams_vars, frictionvel_vars, soilstate_vars)
+
+    ! Setup urban model (initialize temperatures and other setup tasks)
+    call UrbanSetup(urbanxx, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    if (masterproc) then
+       write(*,*) 'Completed urban model setup'
+    end if
 
   end subroutine urbanxx_initialize
 
@@ -457,6 +464,8 @@ contains
   !-----------------------------------------------------------------------
   subroutine SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
     !
+    use elm_varpar, only : nlevgrnd, nlevurb
+    !
     implicit none
     !
     type(UrbanType)        , intent(in) :: urban
@@ -465,10 +474,11 @@ contains
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     !
     integer(c_int)                       :: status
-    integer                              :: fl, l
+    integer                              :: fl, l, j, idx
     real(c_double) , allocatable, target :: tkRoad(:)
     real(c_double) , allocatable, target :: tkWall(:)
     real(c_double) , allocatable, target :: tkRoof(:)
+    integer(c_int), dimension(2) :: size2D_road, size2D_urban
 
     associate(                                       &
          tk_wall    => urbanparams_vars%tk_wall    , & ! Input: [real(r8) (:,:)] thermal conductivity of urban wall
@@ -476,28 +486,45 @@ contains
          tk_improad => urbanparams_vars%tk_improad   & ! Input: [real(r8) (:,:)] thermal conductivity of urban impervious road
          )
 
-      allocate(tkRoad(num_urbanl))
-      allocate(tkWall(num_urbanl))
-      allocate(tkRoof(num_urbanl))
+      size2D_road(1) = num_urbanl
+      size2D_road(2) = nlevgrnd
+
+      size2D_urban(1) = num_urbanl
+      size2D_urban(2) = nlevurb
+      allocate(tkRoad(num_urbanl * nlevgrnd))
+      allocate(tkWall(num_urbanl * nlevurb))
+      allocate(tkRoof(num_urbanl * nlevurb))
 
       ! URBANXX_FIX_ME: Currently using only first layer values.
       ! ELM has multi-layer thermal conductivity data (tk_wall, tk_roof, tk_improad are dimensioned as [landunit, nlevurb]).
       ! Urban++ may need to be updated to accept multi-layer thermal properties.
-      do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         tkRoad(fl) = tk_improad(l, 1)
-         tkWall(fl) = tk_wall(l, 1)
-         tkRoof(fl) = tk_roof(l, 1)
+      idx = 0
+      do j = 1, nlevgrnd
+         do fl = 1, num_urbanl
+            l = filter_urbanl(fl)
+            idx = idx + 1
+            tkRoad(idx) = tk_improad(l, j)
+         enddo
+      end do
+
+      idx = 0
+      do j = 1, num_urbanl
+         do fl = 1, nlevurb
+            l = filter_urbanl(fl)
+            idx = idx + 1
+            tkWall(idx) = tk_wall(l, j)
+            tkRoof(idx) = tk_roof(l, j)
+         enddo
       end do
 
       call UrbanSetThermalConductivityRoad(urban, c_loc(tkRoad), &
-           num_urbanl, status)
+           size2D_road, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetThermalConductivityWall(urban, c_loc(tkWall), &
-           num_urbanl, status)
+           size2D_urban, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetThermalConductivityRoof(urban, c_loc(tkRoof), &
-           num_urbanl, status)
+           size2D_urban, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       if (masterproc) then
@@ -515,6 +542,8 @@ contains
   !-----------------------------------------------------------------------
   subroutine SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
     !
+    use elm_varpar, only : nlevgrnd, nlevurb
+    !
     implicit none
     !
     type(UrbanType)        , intent(in) :: urban
@@ -523,10 +552,11 @@ contains
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     !
     integer(c_int)                       :: status
-    integer                              :: fl, l
+    integer                              :: fl, l, j, idx
     real(c_double) , allocatable, target :: cvRoad(:)
     real(c_double) , allocatable, target :: cvWall(:)
     real(c_double) , allocatable, target :: cvRoof(:)
+    integer(c_int), dimension(2) :: size2D_road, size2D_urban
 
     associate(                                           &
          cv_wall      => urbanparams_vars%cv_wall      , & ! Input: [real(r8) (:,:)] heat capacity of urban wall
@@ -534,33 +564,47 @@ contains
          cv_improad   => urbanparams_vars%cv_improad     & ! Input: [real(r8) (:,:)] heat capacity of urban impervious road
          )
 
-      allocate(cvRoad(num_urbanl))
-      allocate(cvWall(num_urbanl))
-      allocate(cvRoof(num_urbanl))
+      size2D_road(1) = num_urbanl
+      size2D_road(2) = nlevgrnd
 
-      ! URBANXX_FIX_ME: Currently using only first layer values.
-      ! ELM has multi-layer heat capacity data (cv_wall, cv_roof, cv_improad are dimensioned as [landunit, nlevurb]).
-      ! Urban++ may need to be updated to accept multi-layer thermal properties.
-      do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         cvRoad(fl) = cv_improad(l, 1)
-         cvWall(fl) = cv_wall(l, 1)
-         cvRoof(fl) = cv_roof(l, 1)
+      size2D_urban(1) = num_urbanl
+      size2D_urban(2) = nlevurb
+
+      allocate(cvRoad(num_urbanl * nlevgrnd))
+      allocate(cvWall(num_urbanl * nlevurb))
+      allocate(cvRoof(num_urbanl * nlevurb))
+
+      idx = 0
+      do j = 1, nlevgrnd
+         do fl = 1, num_urbanl
+            l = filter_urbanl(fl)
+            idx = idx + 1
+            cvRoad(idx) = cv_improad(l, j)
+         enddo
+      end do
+
+      idx = 0
+      do j = 1, nlevurb
+         do fl = 1, num_urbanl
+            l = filter_urbanl(fl)
+            idx = idx + 1
+            cvWall(idx) = cv_wall(l, j)
+            cvRoof(idx) = cv_roof(l, j)
+         enddo
       end do
 
       call UrbanSetHeatCapacityRoad(urban, c_loc(cvRoad), &
-           num_urbanl, status)
+           size2D_road, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetHeatCapacityWall(urban, c_loc(cvWall), &
-           num_urbanl, status)
+           size2D_urban, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetHeatCapacityRoof(urban, c_loc(cvRoof), &
-           num_urbanl, status)
+           size2D_urban, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       if (masterproc) then
          write(iulog,*) 'Set heat capacity values for all surfaces'
-         write(iulog,*) 'URBANXX_FIX_ME: Only using first layer of multi-layer heat capacity data'
       end if
 
       deallocate(cvRoad)
@@ -774,16 +818,16 @@ contains
       end do
 
       ! set surface temperatures in UrbanXX
-      call UrbanSetTemperatureRoof(urbanxx, c_loc(t_roof), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetTemperatureImperviousRoad(urbanxx, c_loc(t_improad), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetTemperaturePerviousRoad(urbanxx, c_loc(t_perroad), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetTemperatureSunlitWall(urbanxx, c_loc(t_sunwall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanSetTemperatureShadedWall(urbanxx, c_loc(t_shadwall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      !call UrbanSetTemperatureRoof(urbanxx, c_loc(t_roof), num_urbanl, status)
+      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      !call UrbanSetTemperatureImperviousRoad(urbanxx, c_loc(t_improad), num_urbanl, status)
+      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      !call UrbanSetTemperaturePerviousRoad(urbanxx, c_loc(t_perroad), num_urbanl, status)
+      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      !call UrbanSetTemperatureSunlitWall(urbanxx, c_loc(t_sunwall), num_urbanl, status)
+      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      !call UrbanSetTemperatureShadedWall(urbanxx, c_loc(t_shadwall), num_urbanl, status)
+      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeNetLongwave(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -856,8 +900,216 @@ contains
    end subroutine urbanxx_surfaceFluxes
 
    !-----------------------------------------------------------------------
+   subroutine SetSoilProperties(urban, num_urbanl, filter_urbanl, soilstate_vars)
+     !
+     use elm_varpar, only : nlevgrnd
+     !
+     implicit none
+     !
+     type(UrbanType)      , intent(in)    :: urban
+     integer(c_int)       , intent(in)    :: num_urbanl
+     integer              , intent(in)    :: filter_urbanl(:) ! urban landunit filter
+     type(soilstate_type) , intent(in)    :: soilstate_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l, c, j, idx
+     integer(c_int)                       :: totalSize
+     integer(c_int), dimension(2)         :: size2D
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double) , allocatable, target :: sand(:)
+     real(c_double) , allocatable, target :: clay(:)
+     real(c_double) , allocatable, target :: organic(:)
+
+     associate(                               &
+          cellsand => soilstate_vars%cellsand_col , & ! Input: [real(r8) (:,:)] sand fraction
+          cellclay => soilstate_vars%cellclay_col , & ! Input: [real(r8) (:,:)] clay fraction
+          cellorg  => soilstate_vars%cellorg_col  , & ! Input: [real(r8) (:,:)] organic matter
+          coli     => lun_pp%coli                   & ! Input: [integer (:)] beginning column index for landunit
+          )
+
+       totalSize = num_urbanl * nlevgrnd
+       size2D(1) = num_urbanl
+       size2D(2) = nlevgrnd
+
+       allocate(sand(totalSize))
+       allocate(clay(totalSize))
+       allocate(organic(totalSize))
+
+       ! Check Kokkos memory layout
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       if (isLayoutLeft) then
+         ! LayoutLeft: First dimension (landunits) varies fastest
+         ! Iterate: layer (outer), landunits (inner)
+         idx = 0
+         do j = 1, nlevgrnd
+           do fl = 1, num_urbanl
+             l = filter_urbanl(fl)
+             c = coli(l)  ! Get first column for this landunit
+             idx = idx + 1
+             sand(idx) = cellsand(c, j)
+             clay(idx) = cellclay(c, j)
+             organic(idx) = cellorg(c, j)
+           end do
+         end do
+       else
+         ! LayoutRight: Last dimension (layers) varies fastest
+         ! Iterate: landunits (outer), layer (inner)
+         idx = 0
+         do fl = 1, num_urbanl
+           l = filter_urbanl(fl)
+           c = coli(l)  ! Get first column for this landunit
+           do j = 1, nlevgrnd
+             idx = idx + 1
+             sand(idx) = cellsand(c, j)
+             clay(idx) = cellclay(c, j)
+             organic(idx) = cellorg(c, j)
+           end do
+         end do
+       end if
+
+       call UrbanSetSandPerviousRoad(urban, c_loc(sand), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetClayPerviousRoad(urban, c_loc(clay), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetOrganicPerviousRoad(urban, c_loc(organic), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       if (masterproc) then
+         write(iulog,*) 'Set soil properties for pervious road (sand, clay, organic) from ELM data'
+       end if
+
+       deallocate(sand)
+       deallocate(clay)
+       deallocate(organic)
+     end associate
+
+   end subroutine SetSoilProperties
+
+   !-----------------------------------------------------------------------
+   subroutine SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     !
+     implicit none
+     !
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     type(urbanparams_type) , intent(in) :: urbanparams_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l
+     real(c_double) , allocatable, target :: numActiveLayers(:)
+
+     associate(                                 &
+          nlev_improad => urbanparams_vars%nlev_improad  & ! Input: [integer (:)] number of impervious road layers
+          )
+
+       ! Allocate and populate the number of active layers array
+       allocate(numActiveLayers(num_urbanl))
+       do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         numActiveLayers(fl) = real(nlev_improad(l), c_double)
+       end do
+
+       ! Set the number of active layers in the Urban++ instance
+       call UrbanSetNumberOfActiveLayersImperviousRoad(urban, &
+            c_loc(numActiveLayers), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetNumberOfActiveLayersImperviousRoad failed with status: ', status
+         call UrbanError(iam, __LINE__, status)
+       end if
+
+       deallocate(numActiveLayers)
+
+     end associate
+
+   end subroutine SetNumberOfActiveLayersImperviousRoad
+
+   !-----------------------------------------------------------------------
+   subroutine SetBuildingTemperature(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     !
+     implicit none
+     !
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     type(urbanparams_type) , intent(in) :: urbanparams_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l
+     real(c_double) , allocatable, target :: minTemp(:)
+     real(c_double) , allocatable, target :: maxTemp(:)
+     real(c_double) , allocatable, target :: wallThickness(:)
+     real(c_double) , allocatable, target :: roofThickness(:)
+
+     associate(                                        &
+          t_building_min => urbanparams_vars%t_building_min , & ! Input: [real(r8) (:)] minimum internal building temperature (K)
+          t_building_max => urbanparams_vars%t_building_max , & ! Input: [real(r8) (:)] maximum internal building temperature (K)
+          thick_wall     => urbanparams_vars%thick_wall     , & ! Input: [real(r8) (:)] total thickness of urban wall (m)
+          thick_roof     => urbanparams_vars%thick_roof       & ! Input: [real(r8) (:)] total thickness of urban roof (m)
+          )
+
+       ! Set building temperature limits
+       allocate(minTemp(num_urbanl))
+       allocate(maxTemp(num_urbanl))
+
+       do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         minTemp(fl) = t_building_min(l)
+         maxTemp(fl) = t_building_max(l)
+       end do
+
+       call UrbanSetBuildingMinTemperature(urban, c_loc(minTemp), &
+            num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetBuildingMinTemperature failed with status: ', status
+         call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       call UrbanSetBuildingMaxTemperature(urban, c_loc(maxTemp), &
+            num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetBuildingMaxTemperature failed with status: ', status
+         call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       deallocate(minTemp)
+       deallocate(maxTemp)
+
+       ! Set building thickness parameters
+       allocate(wallThickness(num_urbanl))
+       allocate(roofThickness(num_urbanl))
+
+       do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         wallThickness(fl) = thick_wall(l)
+         roofThickness(fl) = thick_roof(l)
+       end do
+
+       call UrbanSetBuildingWallThickness(urban, c_loc(wallThickness), &
+            num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetBuildingWallThickness failed with status: ', status
+         call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       call UrbanSetBuildingRoofThickness(urban, c_loc(roofThickness), &
+            num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetBuildingRoofThickness failed with status: ', status
+         call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       deallocate(wallThickness)
+       deallocate(roofThickness)
+
+     end associate
+
+   end subroutine SetBuildingTemperature
+
+   !-----------------------------------------------------------------------
    subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, &
-        urbanparams_vars, frictionvel_vars)
+        urbanparams_vars, frictionvel_vars, soilstate_vars)
      !
      implicit none
      !
@@ -866,6 +1118,7 @@ contains
      integer                , intent(in)    :: filter_urbanl(:) ! urban landunit filter
      type(urbanparams_type) , intent(in)    :: urbanparams_vars
      type(frictionvel_type) , intent(in)    :: frictionvel_vars
+     type(soilstate_type)   , intent(in)    :: soilstate_vars
 
      call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
      call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
@@ -874,8 +1127,11 @@ contains
           urbanparams_vars, frictionvel_vars)
      call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetBuildingTemperature(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetSoilProperties(urban, num_urbanl, filter_urbanl, soilstate_vars)
 
    end subroutine SetUrbanParameters
 

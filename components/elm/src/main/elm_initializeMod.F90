@@ -1243,7 +1243,8 @@ contains
                   filter_inactive_and_active(nc)%urbanc,     &
                   filter_inactive_and_active(nc)%num_urbanp, &
                   filter_inactive_and_active(nc)%urbanp,     &
-                  urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars)
+                  urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars, &
+                  soilstate_vars)
     end do
 
     call t_stopf('elm_init3')
