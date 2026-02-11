@@ -17,6 +17,7 @@ module UrbanxxMod
   use FrictionVelocityType , only : frictionvel_type
   use TopounitDataType     , only : top_as, top_af
   use ColumnDataType       , only : col_es, col_pp
+  use LandunitDataType     , only : lun_es, lun_ws
   use SoilStateType        , only : soilstate_type
   use abortutils           , only : endrun
 
@@ -894,6 +895,8 @@ contains
      !
      integer(c_int)                       :: status
 
+     call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
+        urbanparams_vars, frictionvel_vars)
      call UrbanComputeSurfaceFluxes(urbanxx, status)
      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
@@ -985,6 +988,61 @@ contains
      end associate
 
    end subroutine SetSoilProperties
+
+   !-----------------------------------------------------------------------
+   subroutine SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
+     !
+     ! !DESCRIPTION:
+     ! Set canyon air temperature and specific humidity from landunit state data.
+     !
+     implicit none
+     !
+     type(UrbanType), intent(in) :: urban
+     integer(c_int) , intent(in) :: num_urbanl
+     integer        , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l
+     real(c_double) , allocatable, target :: tempCanyonAir(:)
+     real(c_double) , allocatable, target :: qafCanyonAir(:)
+
+     associate(                     &
+          taf => lun_es%taf      , & ! Input: [real(r8) (:)] urban canopy air temperature (K)
+          qaf => lun_ws%qaf        & ! Input: [real(r8) (:)] urban canopy air specific humidity (kg H2O/kg moist air)
+          )
+
+       ! Allocate arrays
+       allocate(tempCanyonAir(num_urbanl))
+       allocate(qafCanyonAir(num_urbanl))
+
+       ! Copy data from landunit state to urban arrays
+       do fl = 1, num_urbanl
+          l = filter_urbanl(fl)
+          tempCanyonAir(fl) = taf(l)
+          qafCanyonAir(fl) = qaf(l)
+       end do
+
+       ! Set canyon air temperature
+       call UrbanSetCanyonAirTemperature(urban, c_loc(tempCanyonAir), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+          write(iulog,*) 'ERROR: UrbanSetCanyonAirTemperature failed with status ', status
+          call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       ! Set canyon specific humidity
+       call UrbanSetCanyonSpecificHumidity(urban, c_loc(qafCanyonAir), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+          write(iulog,*) 'ERROR: UrbanSetCanyonSpecificHumidity failed with status ', status
+          call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+
+       ! Deallocate arrays
+       deallocate(tempCanyonAir)
+       deallocate(qafCanyonAir)
+
+     end associate
+
+   end subroutine SetCanyonAirStates
 
    !-----------------------------------------------------------------------
    subroutine SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
@@ -1132,6 +1190,7 @@ contains
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetSoilProperties(urban, num_urbanl, filter_urbanl, soilstate_vars)
+     call SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
 
    end subroutine SetUrbanParameters
 
