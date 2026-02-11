@@ -826,6 +826,7 @@ contains
        call urbanxx_surfaceFluxes( &
                   filter(nc)%num_urbanl, &
                   filter(nc)%urbanl,     &
+                  filter(nc)%num_urbanc, filter(nc)%urbanc,        &
                   surfalb_vars, urbanparams_vars, frictionvel_vars)
 
        ! Fluxes for all lake landunits
