@@ -818,16 +818,16 @@ contains
       end do
 
       ! set surface temperatures in UrbanXX
-      !call UrbanSetTemperatureRoof(urbanxx, c_loc(t_roof), num_urbanl, status)
-      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      !call UrbanSetTemperatureImperviousRoad(urbanxx, c_loc(t_improad), num_urbanl, status)
-      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      !call UrbanSetTemperaturePerviousRoad(urbanxx, c_loc(t_perroad), num_urbanl, status)
-      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      !call UrbanSetTemperatureSunlitWall(urbanxx, c_loc(t_sunwall), num_urbanl, status)
-      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      !call UrbanSetTemperatureShadedWall(urbanxx, c_loc(t_shadwall), num_urbanl, status)
-      !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEffectiveSurfTempRoof(urbanxx, c_loc(t_roof), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEffectiveSurfTempImperviousRoad(urbanxx, c_loc(t_improad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEffectiveSurfTempPerviousRoad(urbanxx, c_loc(t_perroad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEffectiveSurfTempSunlitWall(urbanxx, c_loc(t_sunwall), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetEffectiveSurfTempShadedWall(urbanxx, c_loc(t_shadwall), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeNetLongwave(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
