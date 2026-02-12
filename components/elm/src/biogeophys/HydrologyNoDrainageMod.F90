@@ -44,7 +44,9 @@ contains
        num_hydrononsoic, filter_hydrononsoic, &
        num_urbanc, filter_urbanc, &
        num_snowc, filter_snowc, &
-       num_nosnowc, filter_nosnowc, canopystate_vars, &
+       num_nosnowc, filter_nosnowc, &
+       num_urbanl, &
+       canopystate_vars, &
        atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, soilstate_vars, &
        energyflux_vars, soilhydrology_vars, aerosol_vars)
     ! !DESCRIPTION:
@@ -93,6 +95,7 @@ contains
     integer                  , intent(inout) :: filter_snowc(:)      ! column filter for snow points
     integer                  , intent(inout) :: num_nosnowc          ! number of column non-snow points
     integer                  , intent(inout) :: filter_nosnowc(:)    ! column filter for non-snow points
+    integer                  , intent(in)    :: num_urbanl           ! number of urban landunits
     type(atm2lnd_type)       , intent(in)    :: atm2lnd_vars
     type(ocn2lnd_type)       , intent(in)    :: ocn2lnd_vars
     type(lnd2atm_type)       , intent(in)    :: lnd2atm_vars
@@ -242,14 +245,14 @@ contains
       if (use_pflotran .and. pf_hmode) then
 
         call SoilWater(bounds, num_hydrononsoic, filter_hydrononsoic, &
-            num_urbanc, filter_urbanc, &
+            num_urbanc, filter_urbanc, num_urbanl, &
             soilhydrology_vars, soilstate_vars, dtime)
 
       else
       !------------------------------------------------------------------------------------
 
         call SoilWater(bounds, num_hydrologyc, filter_hydrologyc, num_urbanc, filter_urbanc, &
-            soilhydrology_vars, soilstate_vars, dtime)
+            num_urbanl,soilhydrology_vars, soilstate_vars, dtime)
 
       !------------------------------------------------------------------------------------
       end if

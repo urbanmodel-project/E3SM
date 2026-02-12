@@ -20,7 +20,7 @@ module UrbanxxMod
   use LandunitDataType     , only : lun_es, lun_ws
   use SoilStateType        , only : soilstate_type
   use abortutils           , only : endrun
-  use ColumnDataType       , only : col_ws
+  use ColumnDataType       , only : col_ws, col_wf
 
   implicit none
 
@@ -37,6 +37,7 @@ module UrbanxxMod
   public :: urbanxx_netLongwave
   public :: urbanxx_netShortwave
   public :: urbanxx_surfaceFluxes
+  public :: urbanxx_soilWater
 contains
 
   !-----------------------------------------------------------------------
@@ -77,7 +78,7 @@ contains
     call UrbanCreate(num_urbanl, urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-    call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, &
+    call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
          urbanparams_vars, frictionvel_vars, soilstate_vars)
 
     ! Setup urban model (initialize temperatures and other setup tasks)
@@ -908,19 +909,172 @@ contains
    end subroutine urbanxx_surfaceFluxes
 
    !-----------------------------------------------------------------------
-   subroutine SetSoilProperties(urban, num_urbanl, filter_urbanl, soilstate_vars)
+   subroutine urbanxx_soilWater(num_urbanl, num_urbanc, filter_urbanc, dtime)
+     !
+     ! !DESCRIPTION:
+     ! Set soil water boundary conditions for urban areas
+     !
+     use WaterFluxType, only : waterflux_type
+     use WaterStateType, only : waterstate_type
+     use ColumnType, only : col_pp
+     use column_varcon, only : icol_road_perv
+     use elm_varpar, only : nlevgrnd
+     !
+     implicit none
+     !
+     ! !ARGUMENTS:
+     integer(c_int), intent(in) :: num_urbanl
+     integer(c_int), intent(in) :: num_urbanc
+     integer       , intent(in) :: filter_urbanc(:)  ! urban column filter
+     real(r8)      , intent(in) :: dtime                ! time step (s)
+     !
+     ! !LOCAL VARIABLES:
+     integer(c_int)                       :: status
+     integer                              :: fc, c, j, idx, idx_perv, nlevbed
+     integer(c_int)                       :: totalSize
+     integer(c_int), dimension(2)         :: size2D
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double), allocatable, target  :: qflxInfl(:)
+     real(c_double), allocatable, target  :: qflxTran(:)
+     real(c_double), allocatable, target  :: h2oLiq(:)
+     real(c_double), allocatable, target  :: h2oIce(:)
+     real(c_double), allocatable, target  :: h2oVol(:)
+
+     associate(                             &
+          qflx_infl    => col_wf%qflx_infl    , & ! Input: [real(r8) (:)] infiltration (mm H2O /s)
+          qflx_rootsoi => col_wf%qflx_rootsoi , & ! Input: [real(r8) (:,:)] vegetation/soil water exchange (mm H2O/s) (+ = to atm)
+          nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
+          h2osoi_ice   => col_ws%h2osoi_ice   , & ! Input: [real(r8) (:,:)] ice lens (kg/m2)
+          h2osoi_vol   => col_ws%h2osoi_vol   , & ! Input: [real(r8) (:,:)] volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
+          h2osoi_liq   => col_ws%h2osoi_liq     & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
+          )
+
+       ! Set infiltration flux (1D: per landunit)
+       allocate(qflxInfl(num_urbanl))
+
+       ! Loop through urban columns and extract infiltration flux for pervious road
+       idx_perv = 0
+       do fc = 1, num_urbanc
+         c = filter_urbanc(fc)
+
+         if (col_pp%itype(c) == icol_road_perv) then
+            idx_perv = idx_perv + 1
+            qflxInfl(idx_perv) = qflx_infl(c)
+         end if
+       end do
+
+       call UrbanSetInfiltrationFlux(urbanxx, c_loc(qflxInfl), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(qflxInfl)
+
+       ! Set soil water content and transpiration flux (2D: per landunit x nlevgrnd)
+       totalSize = num_urbanl * nlevgrnd
+       size2D(1) = num_urbanl
+       size2D(2) = nlevgrnd
+
+       allocate(h2oLiq(totalSize))
+       allocate(h2oIce(totalSize))
+       allocate(h2oVol(totalSize))
+       allocate(qflxTran(totalSize))
+
+       ! Check Kokkos memory layout
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       if (isLayoutLeft) then
+         ! LayoutLeft: First dimension (landunits) varies fastest
+         ! Iterate: layer (outer), landunits (inner)
+         idx = 0
+         do j = 1, nlevgrnd
+           idx_perv = 0
+           do fc = 1, num_urbanc
+             c = filter_urbanc(fc)
+             if (col_pp%itype(c) == icol_road_perv) then
+               idx_perv = idx_perv + 1
+               idx = idx + 1
+               nlevbed = nlev2bed(c)
+               if (j <= nlevbed) then
+                 h2oLiq(idx) = h2osoi_liq(c, j)
+                 h2oIce(idx) = h2osoi_ice(c, j)
+                 h2oVol(idx) = h2osoi_vol(c, j)
+                 qflxTran(idx) = qflx_rootsoi(c, j)
+               else
+                 h2oLiq(idx) = 0.0_r8
+                 h2oIce(idx) = 0.0_r8
+                 h2oVol(idx) = 0.0_r8
+                 qflxTran(idx) = 0.0_r8
+               end if
+             end if
+           end do
+         end do
+       else
+         ! LayoutRight: Last dimension (layers) varies fastest
+         ! Iterate: landunits (outer), layer (inner)
+         idx = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_road_perv) then
+             nlevbed = nlev2bed(c)
+             do j = 1, nlevgrnd
+               idx = idx + 1
+               if (j <= nlevbed) then
+                 h2oLiq(idx) = h2osoi_liq(c, j)
+                 h2oIce(idx) = h2osoi_ice(c, j)
+                 h2oVol(idx) = h2osoi_vol(c, j)
+                 qflxTran(idx) = qflx_rootsoi(c, j)
+               else
+                 h2oLiq(idx) = 0.0_r8
+                 h2oIce(idx) = 0.0_r8
+                 h2oVol(idx) = 0.0_r8
+                 qflxTran(idx) = 0.0_r8
+               end if
+             end do
+           end if
+         end do
+       end if
+
+       call UrbanSetSoilLiquidWater(urbanxx, c_loc(h2oLiq), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       call UrbanSetSoilIceContent(urbanxx, c_loc(h2oIce), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       call UrbanSetSoilVolumetricWater(urbanxx, c_loc(h2oVol), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(h2oLiq)
+       deallocate(h2oIce)
+       deallocate(h2oVol)
+
+       call UrbanSetTranspirationFlux(urbanxx, c_loc(qflxTran), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(qflxTran)
+
+       call UrbanComputeHydrology(urbanxx, dtime, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      end associate
+
+   end subroutine urbanxx_soilWater
+
+   !-----------------------------------------------------------------------
+   subroutine SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)
      !
      use elm_varpar, only : nlevgrnd
+     use ColumnType, only : col_pp
+     use column_varcon, only : icol_road_perv
      !
      implicit none
      !
      type(UrbanType)      , intent(in)    :: urban
      integer(c_int)       , intent(in)    :: num_urbanl
-     integer              , intent(in)    :: filter_urbanl(:) ! urban landunit filter
+     integer(c_int)       , intent(in)    :: num_urbanc
+     integer              , intent(in)    :: filter_urbanc(:) ! urban column filter
      type(soilstate_type) , intent(in)    :: soilstate_vars
      !
      integer(c_int)                       :: status
-     integer                              :: fl, l, c, j, idx
+     integer                              :: fc, c, j, idx, nlevbed
      integer(c_int)                       :: totalSize
      integer(c_int), dimension(2)         :: size2D
      logical(c_bool)                      :: isLayoutLeft
@@ -932,7 +1086,7 @@ contains
           cellsand => soilstate_vars%cellsand_col , & ! Input: [real(r8) (:,:)] sand fraction
           cellclay => soilstate_vars%cellclay_col , & ! Input: [real(r8) (:,:)] clay fraction
           cellorg  => soilstate_vars%cellorg_col  , & ! Input: [real(r8) (:,:)] organic matter
-          coli     => lun_pp%coli                   & ! Input: [integer (:)] beginning column index for landunit
+          nlev2bed => col_pp%nlevbed                & ! Input: [integer (:)] number of layers to bedrock
           )
 
        totalSize = num_urbanl * nlevgrnd
@@ -951,28 +1105,46 @@ contains
          ! Iterate: layer (outer), landunits (inner)
          idx = 0
          do j = 1, nlevgrnd
-           do fl = 1, num_urbanl
-             l = filter_urbanl(fl)
-             c = coli(l)  ! Get first column for this landunit
-             idx = idx + 1
-             sand(idx) = cellsand(c, j)
-             clay(idx) = cellclay(c, j)
-             organic(idx) = cellorg(c, j)
+           do fc = 1, num_urbanc
+             c = filter_urbanc(fc)
+             if (col_pp%itype(c) == icol_road_perv) then
+               idx = idx + 1
+               nlevbed = nlev2bed(c)
+               if (j <= nlevbed) then
+                 sand(idx) = cellsand(c, j)
+                 clay(idx) = cellclay(c, j)
+                 organic(idx) = cellorg(c, j)
+               else
+                 ! Below bedrock: set sand to 100%, clay to 0%
+                 sand(idx) = 100.0_r8
+                 clay(idx) = 0.0_r8
+                 organic(idx) = 0.0_r8
+               end if
+             end if
            end do
          end do
        else
          ! LayoutRight: Last dimension (layers) varies fastest
          ! Iterate: landunits (outer), layer (inner)
          idx = 0
-         do fl = 1, num_urbanl
-           l = filter_urbanl(fl)
-           c = coli(l)  ! Get first column for this landunit
-           do j = 1, nlevgrnd
-             idx = idx + 1
-             sand(idx) = cellsand(c, j)
-             clay(idx) = cellclay(c, j)
-             organic(idx) = cellorg(c, j)
-           end do
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_road_perv) then
+             nlevbed = nlev2bed(c)
+             do j = 1, nlevgrnd
+               idx = idx + 1
+               if (j <= nlevbed) then
+                 sand(idx) = cellsand(c, j)
+                 clay(idx) = cellclay(c, j)
+                 organic(idx) = cellorg(c, j)
+               else
+                 ! Below bedrock: set sand to 100%, clay to 0%
+                 sand(idx) = 100.0_r8
+                 clay(idx) = 0.0_r8
+                 organic(idx) = 0.0_r8
+               end if
+             end do
+           end if
          end do
        end if
 
@@ -1247,7 +1419,198 @@ contains
    end subroutine SetBuildingTemperature
 
    !-----------------------------------------------------------------------
-   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, &
+   subroutine SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
+     !
+     use elm_varpar, only : nlevurb, nlevgrnd
+     use column_varcon, only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
+     !
+     implicit none
+     !
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l, c, c_start, c_end, j
+     integer                              :: idx_roof, idx_improad, idx_pervroad, idx_sunwall, idx_shadwall
+     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double), allocatable, target  :: tempRoof(:)
+     real(c_double), allocatable, target  :: tempImpRoad(:)
+     real(c_double), allocatable, target  :: tempPervRoad(:)
+     real(c_double), allocatable, target  :: tempSunlitWall(:)
+     real(c_double), allocatable, target  :: tempShadedWall(:)
+
+     associate(                       &
+          ctype  =>    col_pp%itype , & ! Input:  [integer (:)    ]  column type
+          coli   =>    lun_pp%coli  , & ! Input:  [integer (:)    ]  beginning column index for landunit
+          colf   =>    lun_pp%colf  , & ! Input:  [integer (:)    ]  ending column index for landunit
+          t_soisno =>  col_es%t_soisno & ! Input:  [real(r8) (:,:) ]  soil temperature (K)
+          )
+
+       ! Check memory layout
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       ! Allocate arrays for layer temperatures
+       ! Urban surfaces: (num_urbanl, nlevurb)
+       allocate(tempRoof(num_urbanl * nlevurb))
+       allocate(tempSunlitWall(num_urbanl * nlevurb))
+       allocate(tempShadedWall(num_urbanl * nlevurb))
+       
+       ! Road surfaces: (num_urbanl, nlevgrnd)
+       allocate(tempImpRoad(num_urbanl * nlevgrnd))
+       allocate(tempPervRoad(num_urbanl * nlevgrnd))
+
+       ! Extract layer temperatures from columns based on column type
+       if (isLayoutLeft) then
+         ! LayoutLeft: iterate layers in outer loop, landunits in inner loop
+         ! For urban surfaces (roof, walls)
+         idx_roof = 0
+         idx_sunwall = 0
+         idx_shadwall = 0
+         do j = 1, nlevurb
+           do fl = 1, num_urbanl
+             l = filter_urbanl(fl)
+             c_start = coli(l)
+             c_end   = colf(l)
+             
+             do c = c_start, c_end
+               select case (ctype(c))
+               case (icol_roof)
+                 idx_roof = idx_roof + 1
+                 tempRoof(idx_roof) = t_soisno(c, j)
+               case (icol_sunwall)
+                 idx_sunwall = idx_sunwall + 1
+                 tempSunlitWall(idx_sunwall) = t_soisno(c, j)
+               case (icol_shadewall)
+                 idx_shadwall = idx_shadwall + 1
+                 tempShadedWall(idx_shadwall) = t_soisno(c, j)
+               end select
+             end do
+           end do
+         end do
+         
+         ! For road surfaces
+         idx_improad = 0
+         idx_pervroad = 0
+         do j = 1, nlevgrnd
+           do fl = 1, num_urbanl
+             l = filter_urbanl(fl)
+             c_start = coli(l)
+             c_end   = colf(l)
+             
+             do c = c_start, c_end
+               select case (ctype(c))
+               case (icol_road_imperv)
+                 idx_improad = idx_improad + 1
+                 tempImpRoad(idx_improad) = t_soisno(c, j)
+               case (icol_road_perv)
+                 idx_pervroad = idx_pervroad + 1
+                 tempPervRoad(idx_pervroad) = t_soisno(c, j)
+               end select
+             end do
+           end do
+         end do
+       else
+         ! LayoutRight: iterate landunits in outer loop, layers in inner loop
+         ! For urban surfaces (roof, walls)
+         idx_roof = 0
+         idx_sunwall = 0
+         idx_shadwall = 0
+         do fl = 1, num_urbanl
+           l = filter_urbanl(fl)
+           c_start = coli(l)
+           c_end   = colf(l)
+           
+           do c = c_start, c_end
+             if (ctype(c) == icol_roof) then
+               do j = 1, nlevurb
+                 idx_roof = idx_roof + 1
+                 tempRoof(idx_roof) = t_soisno(c, j)
+               end do
+             else if (ctype(c) == icol_sunwall) then
+               do j = 1, nlevurb
+                 idx_sunwall = idx_sunwall + 1
+                 tempSunlitWall(idx_sunwall) = t_soisno(c, j)
+               end do
+             else if (ctype(c) == icol_shadewall) then
+               do j = 1, nlevurb
+                 idx_shadwall = idx_shadwall + 1
+                 tempShadedWall(idx_shadwall) = t_soisno(c, j)
+               end do
+             end if
+           end do
+         end do
+         
+         ! For road surfaces
+         idx_improad = 0
+         idx_pervroad = 0
+         do fl = 1, num_urbanl
+           l = filter_urbanl(fl)
+           c_start = coli(l)
+           c_end   = colf(l)
+           
+           do c = c_start, c_end
+             if (ctype(c) == icol_road_imperv) then
+               do j = 1, nlevgrnd
+                 idx_improad = idx_improad + 1
+                 tempImpRoad(idx_improad) = t_soisno(c, j)
+               end do
+             else if (ctype(c) == icol_road_perv) then
+               do j = 1, nlevgrnd
+                 idx_pervroad = idx_pervroad + 1
+                 tempPervRoad(idx_pervroad) = t_soisno(c, j)
+               end do
+             end if
+           end do
+         end do
+       end if
+
+       ! Set size arrays
+       size2D_urban(1) = num_urbanl
+       size2D_urban(2) = nlevurb
+       size2D_soil(1) = num_urbanl
+       size2D_soil(2) = nlevgrnd
+
+       ! Set roof layer temperatures
+       call UrbanSetLayerTempRoof(urban, c_loc(tempRoof), size2D_urban, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       ! Set impervious road layer temperatures
+       call UrbanSetLayerTempImperviousRoad(urban, c_loc(tempImpRoad), &
+         size2D_soil, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       ! Set pervious road layer temperatures
+       call UrbanSetLayerTempPerviousRoad(urban, c_loc(tempPervRoad), &
+         size2D_soil, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       ! Set sunlit wall layer temperatures
+       call UrbanSetLayerTempSunlitWall(urban, c_loc(tempSunlitWall), &
+         size2D_urban, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       ! Set shaded wall layer temperatures
+       call UrbanSetLayerTempShadedWall(urban, c_loc(tempShadedWall), &
+         size2D_urban, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       if (masterproc) then
+         write(iulog,*) 'Set layer temperatures for all urban surfaces from ELM data'
+       end if
+
+       deallocate(tempRoof)
+       deallocate(tempImpRoad)
+       deallocate(tempPervRoad)
+       deallocate(tempSunlitWall)
+       deallocate(tempShadedWall)
+     end associate
+
+   end subroutine SetLayerTemperatures
+
+   !-----------------------------------------------------------------------
+   subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
         urbanparams_vars, frictionvel_vars, soilstate_vars)
      !
      implicit none
@@ -1255,6 +1618,8 @@ contains
      type(UrbanType)        , intent(inout) :: urban
      integer(c_int)         , intent(in)    :: num_urbanl
      integer                , intent(in)    :: filter_urbanl(:) ! urban landunit filter
+     integer(c_int)         , intent(in)    :: num_urbanc
+     integer                , intent(in)    :: filter_urbanc(:) ! urban column filter
      type(urbanparams_type) , intent(in)    :: urbanparams_vars
      type(frictionvel_type) , intent(in)    :: frictionvel_vars
      type(soilstate_type)   , intent(in)    :: soilstate_vars
@@ -1268,9 +1633,10 @@ contains
      call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetBuildingTemperature(urban, num_urbanl, filter_urbanl, urbanparams_vars)
+     call SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
-     call SetSoilProperties(urban, num_urbanl, filter_urbanl, soilstate_vars)
+     call SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)
      call SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
 
    end subroutine SetUrbanParameters

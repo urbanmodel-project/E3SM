@@ -16,6 +16,7 @@ module SoilWaterMovementMod
   use ExternalModelInterfaceMod  , only : EMI_Driver
   use elm_instMod , only : waterflux_vars, waterstate_vars, temperature_vars
   use abortutils           , only : endrun
+  use UrbanxxMod                  , only : urbanxx_soilWater
 
   !
   implicit none
@@ -80,7 +81,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine SoilWater(bounds, num_hydrologyc, filter_hydrologyc, &
-       num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
+       num_urbanc, filter_urbanc, num_urbanl, soilhydrology_vars, soilstate_vars, dt)
     !
     ! DESCRIPTION
     ! select one subroutine to do the soil and root water coupling
@@ -104,6 +105,7 @@ contains
     integer                  , intent(in)    :: filter_hydrologyc(:)  ! column filter for soil points
     integer                  , intent(in)    :: num_urbanc            ! number of column urban points in column filter
     integer                  , intent(in)    :: filter_urbanc(:)      ! column filter for urban points
+    integer                  , intent(in)    :: num_urbanl            ! number of urban landunits
     type(soilhydrology_type) , intent(inout) :: soilhydrology_vars
     type(soilstate_type)     , intent(inout) :: soilstate_vars
     real(r8)                 , intent(in)    :: dt
@@ -130,6 +132,8 @@ contains
     select case(soilroot_water_method)
 
     case (zengdecker_2009)
+
+       call urbanxx_soilWater(num_urbanl, num_hydrologyc, filter_hydrologyc, dt)
 
        call soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
             num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)

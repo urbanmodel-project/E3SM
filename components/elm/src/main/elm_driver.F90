@@ -931,7 +931,9 @@ contains
             filter(nc)%num_hydrononsoic, filter(nc)%hydrononsoic,            &
             filter(nc)%num_urbanc, filter(nc)%urbanc,                        &
             filter(nc)%num_snowc, filter(nc)%snowc,                          &
-            filter(nc)%num_nosnowc, filter(nc)%nosnowc,canopystate_vars,     &
+            filter(nc)%num_nosnowc, filter(nc)%nosnowc,                      &
+            filter(nc)%num_urbanl,                                           &
+            canopystate_vars,                                                &
             atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, soilstate_vars,        &
             energyflux_vars, soilhydrology_vars, aerosol_vars )
 
