@@ -909,7 +909,7 @@ contains
    end subroutine urbanxx_surfaceFluxes
 
    !-----------------------------------------------------------------------
-   subroutine urbanxx_soilWater(num_urbanl, num_urbanc, filter_urbanc, dtime)
+   subroutine urbanxx_soilWater(num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars, dtime)
      !
      ! !DESCRIPTION:
      ! Set soil water boundary conditions for urban areas
@@ -919,6 +919,7 @@ contains
      use ColumnType, only : col_pp
      use column_varcon, only : icol_road_perv
      use elm_varpar, only : nlevgrnd
+     use SoilHydrologyType          , only : soilhydrology_type
      !
      implicit none
      !
@@ -926,6 +927,7 @@ contains
      integer(c_int), intent(in) :: num_urbanl
      integer(c_int), intent(in) :: num_urbanc
      integer       , intent(in) :: filter_urbanc(:)  ! urban column filter
+     type(soilhydrology_type) , intent(in) :: soilhydrology_vars
      real(r8)      , intent(in) :: dtime                ! time step (s)
      !
      ! !LOCAL VARIABLES:
@@ -935,6 +937,7 @@ contains
      integer(c_int), dimension(2)         :: size2D
      logical(c_bool)                      :: isLayoutLeft
      real(c_double), allocatable, target  :: qflxInfl(:)
+     real(c_double), allocatable, target  :: zwt(:)
      real(c_double), allocatable, target  :: qflxTran(:)
      real(c_double), allocatable, target  :: h2oLiq(:)
      real(c_double), allocatable, target  :: h2oIce(:)
@@ -946,11 +949,13 @@ contains
           nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
           h2osoi_ice   => col_ws%h2osoi_ice   , & ! Input: [real(r8) (:,:)] ice lens (kg/m2)
           h2osoi_vol   => col_ws%h2osoi_vol   , & ! Input: [real(r8) (:,:)] volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
-          h2osoi_liq   => col_ws%h2osoi_liq     & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
+          h2osoi_liq   => col_ws%h2osoi_liq   , & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
+          zwt_col      => soilhydrology_vars%zwt_col & ! Input: [real(r8) (:)] water table depth (m)
           )
 
        ! Set infiltration flux (1D: per landunit)
        allocate(qflxInfl(num_urbanl))
+       allocate(zwt(num_urbanl))
 
        ! Loop through urban columns and extract infiltration flux for pervious road
        idx_perv = 0
@@ -960,13 +965,18 @@ contains
          if (col_pp%itype(c) == icol_road_perv) then
             idx_perv = idx_perv + 1
             qflxInfl(idx_perv) = qflx_infl(c)
+            zwt(idx_perv) = zwt_col(c)
          end if
        end do
 
        call UrbanSetInfiltrationFlux(urbanxx, c_loc(qflxInfl), num_urbanl, status)
        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+       call UrbanSetWaterTableDepth(urbanxx, c_loc(zwt), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
        deallocate(qflxInfl)
+       deallocate(zwt)
 
        ! Set soil water content and transpiration flux (2D: per landunit x nlevgrnd)
        totalSize = num_urbanl * nlevgrnd

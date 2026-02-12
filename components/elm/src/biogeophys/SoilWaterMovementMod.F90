@@ -133,7 +133,7 @@ contains
 
     case (zengdecker_2009)
 
-       call urbanxx_soilWater(num_urbanl, num_hydrologyc, filter_hydrologyc, dt)
+       call urbanxx_soilWater(num_urbanl, num_hydrologyc, filter_hydrologyc, soilhydrology_vars, dt)
 
        call soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
             num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
