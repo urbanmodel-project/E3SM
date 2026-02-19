@@ -38,6 +38,7 @@ module UrbanxxMod
   public :: urbanxx_netShortwave
   public :: urbanxx_surfaceFluxes
   public :: urbanxx_soilWater
+  public :: urbanxx_soilTemperature
 contains
 
   !-----------------------------------------------------------------------
@@ -511,8 +512,8 @@ contains
       end do
 
       idx = 0
-      do j = 1, num_urbanl
-         do fl = 1, nlevurb
+      do j = 1, nlevurb
+         do fl = 1, num_urbanl
             l = filter_urbanl(fl)
             idx = idx + 1
             tkWall(idx) = tk_wall(l, j)
@@ -1067,6 +1068,55 @@ contains
       end associate
 
    end subroutine urbanxx_soilWater
+
+   !-----------------------------------------------------------------------
+   subroutine urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, temperature_vars)
+     !
+     ! !DESCRIPTION:
+     ! Placeholder for soil temperature calculations in urban areas
+     !
+     use TemperatureType, only : temperature_type
+     use ColumnType     , only : col_pp
+     use column_varcon  , only : icol_road_perv
+     use elm_varpar     , only : nlevgrnd
+     !
+     implicit none
+     !
+     ! !ARGUMENTS:
+     integer(c_int)         , intent(in) :: num_urbanl        ! number of urban landunits
+     integer(c_int)         , intent(in) :: num_urbanc        ! number of urban columns
+     integer                , intent(in) :: filter_urbanl(:)  ! urban layer filter
+     integer                , intent(in) :: filter_urbanc(:)  ! urban column filter
+     type(temperature_type) , intent(in) :: temperature_vars
+     !
+     ! !LOCAL VARIABLES:
+     integer(c_int)                       :: status
+     integer                              :: fc, c, j, fl, l
+     real(c_double) , allocatable, target :: buildingTemp(:)
+
+     ! Set building temperature before heat diffusion
+     associate(                          &
+         t_building => lun_es%t_building & ! Input: [real(r8) (:)   ]  internal building temperature (K)
+         )
+
+       allocate(buildingTemp(num_urbanl))
+       do fl = 1, num_urbanl
+          l = filter_urbanl(fl)
+          buildingTemp(fl) = t_building(l)
+       end do
+
+       call UrbanSetBuildingTemperature(urbanxx, c_loc(buildingTemp), &
+            num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(buildingTemp)
+
+       call UrbanComputeHeatDiffusion(urbanxx, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+     end associate
+
+    end subroutine urbanxx_soilTemperature
 
    !-----------------------------------------------------------------------
    subroutine SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)

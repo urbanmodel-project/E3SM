@@ -181,6 +181,7 @@ contains
     use column_varcon            , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
     use landunit_varcon          , only : istwet, istice, istice_mec, istsoil, istcrop
     use BandDiagonalMod          , only : BandDiagonal
+    use UrbanxxMod               , only : urbanxx_soilTemperature
 
     !
     ! !ARGUMENTS:
@@ -507,6 +508,8 @@ contains
       !
       ! Solve temperature for lake + urban column
       !
+      call urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
+           filter_nolakec_and_urbanc, temperature_vars)
 
       urban_column = .true.
       call SolveTemperature(bounds,                &
