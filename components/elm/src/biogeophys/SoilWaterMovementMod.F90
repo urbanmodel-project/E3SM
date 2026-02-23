@@ -16,7 +16,7 @@ module SoilWaterMovementMod
   use ExternalModelInterfaceMod  , only : EMI_Driver
   use elm_instMod , only : waterflux_vars, waterstate_vars, temperature_vars
   use abortutils           , only : endrun
-  use UrbanxxMod                  , only : urbanxx_soilWater
+  use UrbanxxSoilWaterMod          , only : urbanxx_soilWater
 
   !
   implicit none

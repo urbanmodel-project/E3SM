@@ -181,7 +181,7 @@ contains
     use column_varcon            , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
     use landunit_varcon          , only : istwet, istice, istice_mec, istsoil, istcrop
     use BandDiagonalMod          , only : BandDiagonal
-    use UrbanxxMod               , only : urbanxx_soilTemperature
+    use UrbanxxSoilTemperatureMod , only : urbanxx_soilTemperature
 
     !
     ! !ARGUMENTS:

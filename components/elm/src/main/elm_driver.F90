@@ -185,10 +185,10 @@ module elm_driver
   use elm_varctl                  , only : use_finetop_rad
 
   use timeinfoMod
-  use UrbanxxMod                  , only : urbanxx_SetAtmosphericForcing
-  use UrbanxxMod                  , only : urbanxx_netShortwave
-  use UrbanxxMod                  , only : urbanxx_netLongwave
-  use UrbanxxMod                  , only : urbanxx_surfaceFluxes
+  use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing
+  use UrbanxxNetShortwaveMod      , only : urbanxx_netShortwave
+  use UrbanxxNetLongwaveMod       , only : urbanxx_netLongwave
+  use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
   !
   ! !PUBLIC TYPES:
   implicit none

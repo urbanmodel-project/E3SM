@@ -1,0 +1,170 @@
+module UrbanxxAtmosphericForcingMod
+  !-----------------------------------------------------------------------
+  ! !DESCRIPTION:
+  ! Set atmospheric forcing data for the Urban++ model.
+  !-----------------------------------------------------------------------
+
+  use iso_c_binding
+  use urban_mod
+  use urban_kokkos_interface
+  use shr_kind_mod         , only : r8 => shr_kind_r8
+  use spmdMod              , only : masterproc, iam
+  use elm_varctl           , only : iulog
+  use UrbanParamsType      , only : urbanparams_type
+  use SurfaceAlbedoType    , only : surfalb_type
+  use LandunitType         , only : lun_pp
+  use FrictionVelocityType , only : frictionvel_type
+  use TopounitDataType     , only : top_as, top_af
+  use UrbanxxInstanceMod   , only : urbanxx, numBands, numTypes
+  use UrbanxxMod           , only : SetHeightParameters
+
+  implicit none
+
+  private
+
+  public :: urbanxx_SetAtmosphericForcing
+
+contains
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, surfalb_vars, &
+         urbanparams_vars, frictionvel_vars)
+    !
+    implicit none
+    !
+    integer(c_int)     , intent(in) :: num_urbanl
+    integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
+    type(surfalb_type) , intent(in) :: surfalb_vars
+    type(urbanparams_type) , intent(in)    :: urbanparams_vars
+    type(frictionvel_type) , intent(in)    :: frictionvel_vars
+
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l, t, iband, itype, idx
+    integer(c_int)                       :: totalSize3D
+    integer(c_int), dimension(3)         :: size3D
+    real(c_double) , allocatable, target :: atmTemp(:)
+    real(c_double) , allocatable, target :: atmPotTemp(:)
+    real(c_double) , allocatable, target :: atmRho(:)
+    real(c_double) , allocatable, target :: atmSpcHumd(:)
+    real(c_double) , allocatable, target :: atmPress(:)
+    real(c_double) , allocatable, target :: atmWindU(:)
+    real(c_double) , allocatable, target :: atmWindV(:)
+    real(c_double) , allocatable, target :: atmCoszen(:)
+    real(c_double) , allocatable, target :: atmFracSnow(:)
+    real(c_double) , allocatable, target :: atmLongwave(:)
+    real(c_double) , allocatable, target :: atmShortwave(:)
+
+    associate(                                                        &
+         forc_t     => top_as%tbot     , & ! Input: [real(r8) (:)] atmospheric temperature (K)
+         forc_th    => top_as%thbot    , & ! Input: [real(r8) (:)] atmospheric potential temperature (K)
+         forc_rho   => top_as%rhobot   , & ! Input: [real(r8) (:)] air density (kg/m**3)
+         forc_q     => top_as%qbot     , & ! Input: [real(r8) (:)] atmospheric specific humidity (kg/kg)
+         forc_pbot  => top_as%pbot     , & ! Input: [real(r8) (:)] atmospheric pressure (Pa)
+         forc_u     => top_as%ubot     , & ! Input: [real(r8) (:)] atmospheric wind speed in east direction (m/s)
+         forc_v     => top_as%vbot     , & ! Input: [real(r8) (:)] atmospheric wind speed in north direction (m/s)
+         forc_lwrad => top_af%lwrad_pp , & ! Input: [real(r8) (:)] downward infrared (longwave) radiation under PP (W/m**2)
+         forc_snow  => top_af%snow     , & ! Input: [real(r8) (:)] downscaled snow
+         forc_solad => top_af%solad_pp , & ! Input: [real(r8) (:,:)] direct beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
+         forc_solai => top_af%solai_pp , & ! Input: [real(r8) (:,:)] diffuse beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
+         coli       => lun_pp%coli                           & ! Input: [integer (:)] beginning column index for landunit
+         )
+
+      ! Allocate arrays
+      allocate(atmTemp(num_urbanl))
+      allocate(atmPotTemp(num_urbanl))
+      allocate(atmRho(num_urbanl))
+      allocate(atmSpcHumd(num_urbanl))
+      allocate(atmPress(num_urbanl))
+      allocate(atmWindU(num_urbanl))
+      allocate(atmWindV(num_urbanl))
+      allocate(atmCoszen(num_urbanl))
+      allocate(atmFracSnow(num_urbanl))
+      allocate(atmLongwave(num_urbanl))
+
+      size3D = [num_urbanl, numBands, numTypes]
+      totalSize3D = num_urbanl * numBands * numTypes
+      allocate(atmShortwave(totalSize3D))
+
+      ! Fill arrays with values from ELM data structures
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         t = lun_pp%topounit(l)
+
+         atmTemp(fl)     = forc_t(t)
+         atmPotTemp(fl)  = forc_th(t)
+         atmRho(fl)      = forc_rho(t)
+         atmSpcHumd(fl)  = forc_q(t)
+         atmPress(fl)    = forc_pbot(t)
+         atmWindU(fl)    = forc_u(t)
+         atmWindV(fl)    = forc_v(t)
+         atmCoszen(fl)   = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
+         atmFracSnow(fl) = forc_snow(t)
+         atmLongwave(fl) = forc_lwrad(t)
+      end do
+
+      ! Fill shortwave arrays with direct and diffuse for VIS and NIR bands
+      ! Indexing: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
+      ! itype = 0: diffuse, itype = 1: direct
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         t = lun_pp%topounit(l)
+         do iband = 0, numBands - 1
+            ! itype = 0: diffuse
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
+            atmShortwave(idx) = forc_solai(t, iband+1)
+
+            ! itype = 1: direct
+            idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
+            atmShortwave(idx) = forc_solad(t, iband+1)
+         end do
+      end do
+
+      ! Set atmospheric forcing
+      call UrbanSetAtmTemp(urbanxx, c_loc(atmTemp), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmPotTemp(urbanxx, c_loc(atmPotTemp), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmRho(urbanxx, c_loc(atmRho), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmSpcHumd(urbanxx, c_loc(atmSpcHumd), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmPress(urbanxx, c_loc(atmPress), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmWindU(urbanxx, c_loc(atmWindU), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmWindV(urbanxx, c_loc(atmWindV), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmCoszen(urbanxx, c_loc(atmCoszen), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmFracSnow(urbanxx, c_loc(atmFracSnow), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmLongwaveDown(urbanxx, c_loc(atmLongwave), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmShortwaveDown(urbanxx, c_loc(atmShortwave), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      if (masterproc) then
+         write(iulog,*) 'Set atmospheric forcing from ELM data structures'
+      end if
+
+      call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
+         urbanparams_vars, frictionvel_vars)
+
+      ! Free arrays
+      deallocate(atmTemp)
+      deallocate(atmPotTemp)
+      deallocate(atmRho)
+      deallocate(atmSpcHumd)
+      deallocate(atmPress)
+      deallocate(atmWindU)
+      deallocate(atmWindV)
+      deallocate(atmCoszen)
+      deallocate(atmFracSnow)
+      deallocate(atmLongwave)
+      deallocate(atmShortwave)
+    end associate
+
+  end subroutine urbanxx_SetAtmosphericForcing
+
+end module UrbanxxAtmosphericForcingMod
