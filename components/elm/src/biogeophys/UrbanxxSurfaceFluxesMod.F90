@@ -21,9 +21,50 @@ module UrbanxxSurfaceFluxesMod
 
   private
 
+  ! Persistent input buffers (allocated once in init)
+  real(c_double) , allocatable, target :: fwet_road(:)
+  real(c_double) , allocatable, target :: fwet_roof(:)
+
+  ! Persistent output buffers (allocated once in init)
+  real(c_double) , allocatable, target, public :: eflx_sh_grnd_roof(:)
+  real(c_double) , allocatable, target, public :: eflx_sh_grnd_improad(:)
+  real(c_double) , allocatable, target, public :: eflx_sh_grnd_perroad(:)
+  real(c_double) , allocatable, target, public :: eflx_sh_grnd_sunwall(:)
+  real(c_double) , allocatable, target, public :: eflx_sh_grnd_shadwall(:)
+  real(c_double) , allocatable, target, public :: qflx_evap_soi_roof(:)
+  real(c_double) , allocatable, target, public :: qflx_evap_soi_improad(:)
+  real(c_double) , allocatable, target, public :: qflx_evap_soi_perroad(:)
+
+  public :: urbanxx_surfaceFluxes_init
   public :: urbanxx_surfaceFluxes
 
 contains
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_surfaceFluxes_init(num_urbanl)
+    !
+    ! !DESCRIPTION:
+    ! Allocate persistent buffers for surface fluxes computation.
+    ! Called once during initialization.
+    !
+    implicit none
+    integer(c_int), intent(in) :: num_urbanl
+
+    ! Input buffers
+    allocate(fwet_road(num_urbanl))
+    allocate(fwet_roof(num_urbanl))
+
+    ! Output buffers
+    allocate(eflx_sh_grnd_roof(num_urbanl))
+    allocate(eflx_sh_grnd_improad(num_urbanl))
+    allocate(eflx_sh_grnd_perroad(num_urbanl))
+    allocate(eflx_sh_grnd_sunwall(num_urbanl))
+    allocate(eflx_sh_grnd_shadwall(num_urbanl))
+    allocate(qflx_evap_soi_roof(num_urbanl))
+    allocate(qflx_evap_soi_improad(num_urbanl))
+    allocate(qflx_evap_soi_perroad(num_urbanl))
+
+  end subroutine urbanxx_surfaceFluxes_init
 
   !-----------------------------------------------------------------------
   subroutine urbanxx_surfaceFluxes(num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
@@ -48,6 +89,26 @@ contains
     call UrbanComputeSurfaceFluxes(urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+    ! Extract sensible heat flux from UrbanXX
+    call UrbanGetSensibleHeatFluxRoof(urbanxx, c_loc(eflx_sh_grnd_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetSensibleHeatFluxImperviousRoad(urbanxx, c_loc(eflx_sh_grnd_improad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetSensibleHeatFluxPerviousRoad(urbanxx, c_loc(eflx_sh_grnd_perroad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetSensibleHeatFluxSunlitWall(urbanxx, c_loc(eflx_sh_grnd_sunwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetSensibleHeatFluxShadedWall(urbanxx, c_loc(eflx_sh_grnd_shadwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    ! Extract soil evaporation flux from UrbanXX
+    call UrbanGetEvapFluxRoof(urbanxx, c_loc(qflx_evap_soi_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetEvapFluxImperviousRoad(urbanxx, c_loc(qflx_evap_soi_improad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetEvapFluxPerviousRoad(urbanxx, c_loc(qflx_evap_soi_perroad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
   end subroutine urbanxx_surfaceFluxes
 
   !-----------------------------------------------------------------------
@@ -69,8 +130,6 @@ contains
     !
     integer(c_int)                       :: status
     integer                              :: fc, l, c, idx_road, idx_roof
-    real(c_double), allocatable, target  :: fwet_road(:)
-    real(c_double), allocatable, target  :: fwet_roof(:)
     real(r8)                             :: fwet
 
     associate(                             &
@@ -78,9 +137,6 @@ contains
          h2osoi_liq => col_ws%h2osoi_liq , & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
          h2osoi_ice => col_ws%h2osoi_ice   & ! Input: [real(r8) (:,:)] ice water (kg/m2
          )
-
-      allocate(fwet_road(num_urbanl))
-      allocate(fwet_roof(num_urbanl))
 
       ! Loop through urban landunits
       idx_road = 0
@@ -118,9 +174,6 @@ contains
 
       call UrbanSetFractionWetRoof(urban, c_loc(fwet_roof), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      deallocate(fwet_road)
-      deallocate(fwet_roof)
 
     end associate
 

@@ -22,9 +22,50 @@ module UrbanxxAtmosphericForcingMod
 
   private
 
+  ! Persistent input buffers (allocated once in init)
+  real(c_double) , allocatable, target :: atmTemp(:)
+  real(c_double) , allocatable, target :: atmPotTemp(:)
+  real(c_double) , allocatable, target :: atmRho(:)
+  real(c_double) , allocatable, target :: atmSpcHumd(:)
+  real(c_double) , allocatable, target :: atmPress(:)
+  real(c_double) , allocatable, target :: atmWindU(:)
+  real(c_double) , allocatable, target :: atmWindV(:)
+  real(c_double) , allocatable, target :: atmCoszen(:)
+  real(c_double) , allocatable, target :: atmFracSnow(:)
+  real(c_double) , allocatable, target :: atmLongwave(:)
+  real(c_double) , allocatable, target :: atmShortwave(:)
+
+  public :: urbanxx_SetAtmosphericForcing_init
   public :: urbanxx_SetAtmosphericForcing
 
 contains
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_SetAtmosphericForcing_init(num_urbanl)
+    !
+    ! !DESCRIPTION:
+    ! Allocate persistent buffers for atmospheric forcing.
+    ! Called once during initialization.
+    !
+    implicit none
+    integer(c_int), intent(in) :: num_urbanl
+    integer(c_int) :: totalSize3D
+
+    allocate(atmTemp(num_urbanl))
+    allocate(atmPotTemp(num_urbanl))
+    allocate(atmRho(num_urbanl))
+    allocate(atmSpcHumd(num_urbanl))
+    allocate(atmPress(num_urbanl))
+    allocate(atmWindU(num_urbanl))
+    allocate(atmWindV(num_urbanl))
+    allocate(atmCoszen(num_urbanl))
+    allocate(atmFracSnow(num_urbanl))
+    allocate(atmLongwave(num_urbanl))
+
+    totalSize3D = num_urbanl * numBands * numTypes
+    allocate(atmShortwave(totalSize3D))
+
+  end subroutine urbanxx_SetAtmosphericForcing_init
 
   !-----------------------------------------------------------------------
   subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, surfalb_vars, &
@@ -43,17 +84,6 @@ contains
     integer                              :: fl, l, t, iband, itype, idx
     integer(c_int)                       :: totalSize3D
     integer(c_int), dimension(3)         :: size3D
-    real(c_double) , allocatable, target :: atmTemp(:)
-    real(c_double) , allocatable, target :: atmPotTemp(:)
-    real(c_double) , allocatable, target :: atmRho(:)
-    real(c_double) , allocatable, target :: atmSpcHumd(:)
-    real(c_double) , allocatable, target :: atmPress(:)
-    real(c_double) , allocatable, target :: atmWindU(:)
-    real(c_double) , allocatable, target :: atmWindV(:)
-    real(c_double) , allocatable, target :: atmCoszen(:)
-    real(c_double) , allocatable, target :: atmFracSnow(:)
-    real(c_double) , allocatable, target :: atmLongwave(:)
-    real(c_double) , allocatable, target :: atmShortwave(:)
 
     associate(                                                        &
          forc_t     => top_as%tbot     , & ! Input: [real(r8) (:)] atmospheric temperature (K)
@@ -70,21 +100,8 @@ contains
          coli       => lun_pp%coli                           & ! Input: [integer (:)] beginning column index for landunit
          )
 
-      ! Allocate arrays
-      allocate(atmTemp(num_urbanl))
-      allocate(atmPotTemp(num_urbanl))
-      allocate(atmRho(num_urbanl))
-      allocate(atmSpcHumd(num_urbanl))
-      allocate(atmPress(num_urbanl))
-      allocate(atmWindU(num_urbanl))
-      allocate(atmWindV(num_urbanl))
-      allocate(atmCoszen(num_urbanl))
-      allocate(atmFracSnow(num_urbanl))
-      allocate(atmLongwave(num_urbanl))
-
       size3D = [num_urbanl, numBands, numTypes]
       totalSize3D = num_urbanl * numBands * numTypes
-      allocate(atmShortwave(totalSize3D))
 
       ! Fill arrays with values from ELM data structures
       do fl = 1, num_urbanl
@@ -151,18 +168,6 @@ contains
       call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
          urbanparams_vars, frictionvel_vars)
 
-      ! Free arrays
-      deallocate(atmTemp)
-      deallocate(atmPotTemp)
-      deallocate(atmRho)
-      deallocate(atmSpcHumd)
-      deallocate(atmPress)
-      deallocate(atmWindU)
-      deallocate(atmWindV)
-      deallocate(atmCoszen)
-      deallocate(atmFracSnow)
-      deallocate(atmLongwave)
-      deallocate(atmShortwave)
     end associate
 
   end subroutine urbanxx_SetAtmosphericForcing

@@ -18,9 +18,61 @@ module UrbanxxSoilWaterMod
 
   private
 
+  ! Persistent input buffers (allocated once in init)
+  real(c_double) , allocatable, target :: qflxInfl(:)
+  real(c_double) , allocatable, target :: zwt(:)
+  real(c_double) , allocatable, target :: qflxTran(:)
+  real(c_double) , allocatable, target :: h2oLiq(:)
+  real(c_double) , allocatable, target :: h2oIce(:)
+  real(c_double) , allocatable, target :: h2oVol(:)
+
+  ! Persistent output buffers (allocated once in init)
+  ! 2D: (num_urbanl * nlevgrnd) flattened
+  real(c_double) , allocatable, target, public :: out_h2osoi_liq(:)
+  real(c_double) , allocatable, target, public :: out_h2osoi_vol(:)
+  ! 1D: (num_urbanl)
+  real(c_double) , allocatable, target, public :: out_qcharge(:)
+  real(c_double) , allocatable, target, public :: out_qflx_deficit(:)
+
+  public :: urbanxx_soilWater_init
   public :: urbanxx_soilWater
 
 contains
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_soilWater_init(num_urbanl)
+    !
+    ! !DESCRIPTION:
+    ! Allocate persistent buffers for hydrology computation.
+    ! Called once during initialization.
+    !
+    use elm_varpar, only : nlevgrnd
+    !
+    implicit none
+    integer(c_int), intent(in) :: num_urbanl
+    integer(c_int) :: totalSize
+
+    totalSize = num_urbanl * nlevgrnd
+
+    ! Input buffers — 1D
+    allocate(qflxInfl(num_urbanl))
+    allocate(zwt(num_urbanl))
+
+    ! Input buffers — 2D flattened
+    allocate(h2oLiq(totalSize))
+    allocate(h2oIce(totalSize))
+    allocate(h2oVol(totalSize))
+    allocate(qflxTran(totalSize))
+
+    ! Output buffers — 2D flattened
+    allocate(out_h2osoi_liq(totalSize))
+    allocate(out_h2osoi_vol(totalSize))
+
+    ! Output buffers — 1D
+    allocate(out_qcharge(num_urbanl))
+    allocate(out_qflx_deficit(num_urbanl))
+
+  end subroutine urbanxx_soilWater_init
 
   !-----------------------------------------------------------------------
   subroutine urbanxx_soilWater(num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars, dtime)
@@ -50,12 +102,6 @@ contains
     integer(c_int)                       :: totalSize
     integer(c_int), dimension(2)         :: size2D
     logical(c_bool)                      :: isLayoutLeft
-    real(c_double), allocatable, target  :: qflxInfl(:)
-    real(c_double), allocatable, target  :: zwt(:)
-    real(c_double), allocatable, target  :: qflxTran(:)
-    real(c_double), allocatable, target  :: h2oLiq(:)
-    real(c_double), allocatable, target  :: h2oIce(:)
-    real(c_double), allocatable, target  :: h2oVol(:)
 
     associate(                             &
          qflx_infl    => col_wf%qflx_infl    , & ! Input: [real(r8) (:)] infiltration (mm H2O /s)
@@ -68,8 +114,6 @@ contains
          )
 
       ! Set infiltration flux (1D: per landunit)
-      allocate(qflxInfl(num_urbanl))
-      allocate(zwt(num_urbanl))
 
       ! Loop through urban columns and extract infiltration flux for pervious road
       idx_perv = 0
@@ -89,18 +133,10 @@ contains
       call UrbanSetWaterTableDepth(urbanxx, c_loc(zwt), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      deallocate(qflxInfl)
-      deallocate(zwt)
-
       ! Set soil water content and transpiration flux (2D: per landunit x nlevgrnd)
       totalSize = num_urbanl * nlevgrnd
       size2D(1) = num_urbanl
       size2D(2) = nlevgrnd
-
-      allocate(h2oLiq(totalSize))
-      allocate(h2oIce(totalSize))
-      allocate(h2oVol(totalSize))
-      allocate(qflxTran(totalSize))
 
       ! Check Kokkos memory layout
       isLayoutLeft = UrbanKokkosIsLayoutLeft()
@@ -166,16 +202,23 @@ contains
       call UrbanSetSoilVolumetricWater(urbanxx, c_loc(h2oVol), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      deallocate(h2oLiq)
-      deallocate(h2oIce)
-      deallocate(h2oVol)
-
       call UrbanSetTranspirationFlux(urbanxx, c_loc(qflxTran), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      deallocate(qflxTran)
-
       call UrbanComputeHydrology(urbanxx, dtime, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! Extract hydrology outputs from UrbanXX
+      ! 2D outputs: soil liquid water and volumetric water (pervious road)
+      call UrbanGetSoilLiquidWaterPerviousRoad(urbanxx, c_loc(out_h2osoi_liq), size2D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanGetSoilVolumetricWaterPerviousRoad(urbanxx, c_loc(out_h2osoi_vol), size2D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! 1D outputs: aquifer recharge rate and water deficit flux
+      call UrbanGetAquiferRechargeRatePerviousRoad(urbanxx, c_loc(out_qcharge), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanGetWaterDeficitFluxPerviousRoad(urbanxx, c_loc(out_qflx_deficit), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
      end associate

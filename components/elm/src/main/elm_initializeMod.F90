@@ -1181,6 +1181,12 @@ contains
     use ExternalModelConstants   , only : EM_ID_PTM
     use filterMod                , only : filter_inactive_and_active
     use UrbanxxMod               , only : urbanxx_initialize
+    use UrbanxxNetLongwaveMod    , only : urbanxx_netLongwave_init
+    use UrbanxxNetShortwaveMod   , only : urbanxx_netShortwave_init
+    use UrbanxxSurfaceFluxesMod  , only : urbanxx_surfaceFluxes_init
+    use UrbanxxSoilTemperatureMod, only : urbanxx_soilTemperature_init
+    use UrbanxxSoilWaterMod      , only : urbanxx_soilWater_init
+    use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing_init
 
     implicit none
 
@@ -1245,6 +1251,14 @@ contains
                   filter_inactive_and_active(nc)%urbanp,     &
                   urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars, &
                   soilstate_vars)
+
+      ! Allocate persistent buffers for physics modules
+      call urbanxx_netLongwave_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_netShortwave_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_surfaceFluxes_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_soilTemperature_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_soilWater_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_SetAtmosphericForcing_init(filter_inactive_and_active(nc)%num_urbanl)
     end do
 
     call t_stopf('elm_init3')

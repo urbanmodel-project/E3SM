@@ -75,6 +75,9 @@ contains
        write(*,*) 'Completed urban model setup'
     end if
 
+    ! Allocate persistent buffers for physics modules
+    ! (init calls moved to elm_initializeMod.F90 to avoid circular dependency)
+
   end subroutine urbanxx_initialize
 
   !-----------------------------------------------------------------------
