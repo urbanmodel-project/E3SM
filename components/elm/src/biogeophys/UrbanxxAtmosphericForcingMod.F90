@@ -84,6 +84,7 @@ contains
     integer                              :: fl, l, t, iband, itype, idx
     integer(c_int)                       :: totalSize3D
     integer(c_int), dimension(3)         :: size3D
+    logical(c_bool)                      :: isLayoutLeft
 
     associate(                                                        &
          forc_t     => top_as%tbot     , & ! Input: [real(r8) (:)] atmospheric temperature (K)
@@ -121,21 +122,47 @@ contains
       end do
 
       ! Fill shortwave arrays with direct and diffuse for VIS and NIR bands
-      ! Indexing: idx = ilandunit * numBands * numTypes + iband * numTypes + itype
+      ! Kokkos View dimensions: (numLandunits, numRadBands, numRadTypes)
       ! itype = 0: diffuse, itype = 1: direct
-      do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         t = lun_pp%topounit(l)
-         do iband = 0, numBands - 1
-            ! itype = 0: diffuse
-            idx = (fl-1) * numBands * numTypes + iband * numTypes + 0 + 1  ! +1 for Fortran 1-indexing
-            atmShortwave(idx) = forc_solai(t, iband+1)
+      isLayoutLeft = UrbanKokkosIsLayoutLeft()
 
-            ! itype = 1: direct
-            idx = (fl-1) * numBands * numTypes + iband * numTypes + 1 + 1  ! +1 for Fortran 1-indexing
-            atmShortwave(idx) = forc_solad(t, iband+1)
-         end do
-      end do
+      if (isLayoutLeft) then
+        ! LayoutLeft: First dimension (landunits) varies fastest
+        ! Memory order: landunit, band, type
+        idx = 0
+        do itype = 0, numTypes - 1
+          do iband = 0, numBands - 1
+            do fl = 1, num_urbanl
+              l = filter_urbanl(fl)
+              t = lun_pp%topounit(l)
+              idx = idx + 1
+              if (itype == 0) then
+                atmShortwave(idx) = forc_solad(t, iband+1)  ! direct
+              else
+                atmShortwave(idx) = forc_solai(t, iband+1)  ! diffuse
+              end if
+            end do
+          end do
+        end do
+      else
+        ! LayoutRight: Last dimension (types) varies fastest
+        ! Memory order: type, band, landunit
+        idx = 0
+        do fl = 1, num_urbanl
+          l = filter_urbanl(fl)
+          t = lun_pp%topounit(l)
+          do iband = 0, numBands - 1
+            do itype = 0, numTypes - 1
+              idx = idx + 1
+              if (itype == 0) then
+                atmShortwave(idx) = forc_solad(t, iband+1)  ! direct
+              else
+                atmShortwave(idx) = forc_solai(t, iband+1)  ! diffuse
+              end if
+            end do
+          end do
+        end do
+      end if
 
       ! Set atmospheric forcing
       call UrbanSetAtmTemp(urbanxx, c_loc(atmTemp), num_urbanl, status)
@@ -159,6 +186,9 @@ contains
       call UrbanSetAtmLongwaveDown(urbanxx, c_loc(atmLongwave), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetAtmShortwaveDown(urbanxx, c_loc(atmShortwave), size3D, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanComputeNetShortwaveRadiation(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       if (masterproc) then

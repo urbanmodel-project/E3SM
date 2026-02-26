@@ -16,6 +16,9 @@ module UrbanxxSurfaceFluxesMod
   use ColumnDataType       , only : col_ws
   use UrbanxxInstanceMod   , only : urbanxx
   use UrbanxxMod           , only : SetHeightParameters
+  use VegetationDataType   , only : veg_ef, veg_wf
+  use VegetationType       , only : veg_pp
+  use LandunitDataType     , only : lun_es, lun_ws
 
   implicit none
 
@@ -34,6 +37,18 @@ module UrbanxxSurfaceFluxesMod
   real(c_double) , allocatable, target, public :: qflx_evap_soi_roof(:)
   real(c_double) , allocatable, target, public :: qflx_evap_soi_improad(:)
   real(c_double) , allocatable, target, public :: qflx_evap_soi_perroad(:)
+  real(c_double) , allocatable, target, public :: cgrnds_roof(:)
+  real(c_double) , allocatable, target, public :: cgrnds_improad(:)
+  real(c_double) , allocatable, target, public :: cgrnds_perroad(:)
+  real(c_double) , allocatable, target, public :: cgrnds_sunwall(:)
+  real(c_double) , allocatable, target, public :: cgrnds_shadwall(:)
+  real(c_double) , allocatable, target, public :: cgrndl_roof(:)
+  real(c_double) , allocatable, target, public :: cgrndl_improad(:)
+  real(c_double) , allocatable, target, public :: cgrndl_perroad(:)
+  real(c_double) , allocatable, target, public :: cgrndl_sunwall(:)
+  real(c_double) , allocatable, target, public :: cgrndl_shadwall(:)
+  real(c_double) , allocatable, target, public :: taf(:)
+  real(c_double) , allocatable, target, public :: qaf(:)
 
   public :: urbanxx_surfaceFluxes_init
   public :: urbanxx_surfaceFluxes
@@ -63,12 +78,27 @@ contains
     allocate(qflx_evap_soi_roof(num_urbanl))
     allocate(qflx_evap_soi_improad(num_urbanl))
     allocate(qflx_evap_soi_perroad(num_urbanl))
+    allocate(cgrnds_roof(num_urbanl))
+    allocate(cgrnds_improad(num_urbanl))
+    allocate(cgrnds_perroad(num_urbanl))
+    allocate(cgrnds_sunwall(num_urbanl))
+    allocate(cgrnds_shadwall(num_urbanl))
+    allocate(cgrndl_roof(num_urbanl))
+    allocate(cgrndl_improad(num_urbanl))
+    allocate(cgrndl_perroad(num_urbanl))
+    allocate(cgrndl_sunwall(num_urbanl))
+    allocate(cgrndl_shadwall(num_urbanl))
+    allocate(taf(num_urbanl))
+    allocate(qaf(num_urbanl))
 
   end subroutine urbanxx_surfaceFluxes_init
 
   !-----------------------------------------------------------------------
   subroutine urbanxx_surfaceFluxes(num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
-       surfalb_vars, urbanparams_vars, frictionvel_vars)
+       num_urbanp, filter_urbanp, surfalb_vars, urbanparams_vars, frictionvel_vars)
+    !
+    use column_varcon, only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
+    use ColumnType, only : col_pp
     !
     implicit none
     !
@@ -76,11 +106,16 @@ contains
     integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
     integer(c_int)     , intent(in) :: num_urbanc
     integer            , intent(in) :: filter_urbanc(:)         ! urban column filter
+    integer(c_int)     , intent(in) :: num_urbanp
+    integer            , intent(in) :: filter_urbanp(:)         ! urban point filter
     type(surfalb_type) , intent(in) :: surfalb_vars
     type(urbanparams_type) , intent(in)    :: urbanparams_vars
     type(frictionvel_type) , intent(in)    :: frictionvel_vars
     !
     integer(c_int)                       :: status
+    integer                              :: fp, c, p, fl, l
+    real(r8)                             :: max_error
+    integer :: idx_roof, idx_road_improv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
 
     call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
        urbanparams_vars, frictionvel_vars)
@@ -109,6 +144,96 @@ contains
     call UrbanGetEvapFluxPerviousRoad(urbanxx, c_loc(qflx_evap_soi_perroad), num_urbanl, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+    ! Extract Cgrnds (d(sensible heat flux)/dT) from UrbanXX
+    call UrbanGetCgrndsRoof(urbanxx, c_loc(cgrnds_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndsImperviousRoad(urbanxx, c_loc(cgrnds_improad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndsPerviousRoad(urbanxx, c_loc(cgrnds_perroad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndsSunlitWall(urbanxx, c_loc(cgrnds_sunwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndsShadedWall(urbanxx, c_loc(cgrnds_shadwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    ! Extract Cgrndl (d(latent heat flux)/dT) from UrbanXX
+    call UrbanGetCgrndlRoof(urbanxx, c_loc(cgrndl_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndlImperviousRoad(urbanxx, c_loc(cgrndl_improad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndlPerviousRoad(urbanxx, c_loc(cgrndl_perroad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndlSunlitWall(urbanxx, c_loc(cgrndl_sunwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCgrndlShadedWall(urbanxx, c_loc(cgrndl_shadwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    ! Extract canyon air temperature and humidity from UrbanXX
+    call UrbanGetCanyonAirTemperature(urbanxx, c_loc(taf), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetCanyonAirHumidity(urbanxx, c_loc(qaf), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+   max_error = 0._r8
+   idx_roof = 0
+   idx_road_improv = 0
+   idx_road_perv = 0
+   idx_sunwall = 0
+   idx_shadwall = 0
+
+   do fp = 1, num_urbanp
+
+      p = filter_urbanp(fp)
+      c = veg_pp%column(p)
+
+      select case (col_pp%itype(c))
+      case (icol_roof)
+         idx_roof = idx_roof + 1
+         max_error = max(max_error, abs(veg_ef%eflx_sh_grnd(p) - eflx_sh_grnd_roof(idx_roof)))
+         max_error = max(max_error, abs(veg_wf%qflx_evap_soi(p) - qflx_evap_soi_roof(idx_roof)))
+         max_error = max(max_error, abs(veg_ef%cgrnds(p) - cgrnds_roof(idx_roof)))
+         max_error = max(max_error, abs(veg_ef%cgrndl(p) - cgrndl_roof(idx_roof)))
+      case (icol_road_imperv)
+         idx_road_improv = idx_road_improv + 1
+         max_error = max(max_error, abs(veg_ef%eflx_sh_grnd(p) - eflx_sh_grnd_improad(idx_road_improv)))
+         max_error = max(max_error, abs(veg_wf%qflx_evap_soi(p) - qflx_evap_soi_improad(idx_road_improv)))
+         max_error = max(max_error, abs(veg_ef%cgrnds(p) - cgrnds_improad(idx_road_improv)))
+         max_error = max(max_error, abs(veg_ef%cgrndl(p) - cgrndl_improad(idx_road_improv)))
+      case (icol_road_perv)
+         idx_road_perv = idx_road_perv + 1
+         max_error = max(max_error, abs(veg_ef%eflx_sh_grnd(p) - eflx_sh_grnd_perroad(idx_road_perv)))
+         max_error = max(max_error, abs(veg_wf%qflx_evap_soi(p) - qflx_evap_soi_perroad(idx_road_perv)))
+         max_error = max(max_error, abs(veg_ef%cgrnds(p) - cgrnds_perroad(idx_road_perv)))
+         max_error = max(max_error, abs(veg_ef%cgrndl(p) - cgrndl_perroad(idx_road_perv)))
+      case (icol_sunwall)
+         idx_sunwall = idx_sunwall + 1
+         max_error = max(max_error, abs(veg_ef%eflx_sh_grnd(p) - eflx_sh_grnd_sunwall(idx_sunwall)))
+         max_error = max(max_error, abs(veg_ef%cgrnds(p) - cgrnds_sunwall(idx_sunwall)))
+         max_error = max(max_error, abs(veg_ef%cgrndl(p) - cgrndl_sunwall(idx_sunwall)))
+      case (icol_shadewall)
+         idx_shadwall = idx_shadwall + 1
+         max_error = max(max_error, abs(veg_ef%eflx_sh_grnd(p) - eflx_sh_grnd_shadwall(idx_shadwall)))
+         max_error = max(max_error, abs(veg_ef%cgrnds(p) - cgrnds_shadwall(idx_shadwall)))
+         max_error = max(max_error, abs(veg_ef%cgrndl(p) - cgrndl_shadwall(idx_shadwall)))
+      end select
+   end do
+   write(iulog,*) 'Max error in surface fluxes         : ', max_error
+   if (max_error > 1.0e-10) then
+      write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface flux computation.'
+      call exit(0)
+   end if
+
+   max_error = 0._r8
+   do fl = 1, num_urbanl
+      l = filter_urbanl(fl)
+      max_error = max(max_error, abs(lun_es%taf(l) - taf(fl)))
+      max_error = max(max_error, abs(lun_ws%qaf(l) - qaf(fl)))
+   end do
+   write(iulog,*) 'Max error in surface Taf, Qaf       : ', max_error
+   if (max_error > 1.0e-10) then
+      write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface Taf/Qaf computation.'
+      call exit(0)
+   end if
   end subroutine urbanxx_surfaceFluxes
 
   !-----------------------------------------------------------------------

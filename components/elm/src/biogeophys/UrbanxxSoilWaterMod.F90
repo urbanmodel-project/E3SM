@@ -36,6 +36,7 @@ module UrbanxxSoilWaterMod
 
   public :: urbanxx_soilWater_init
   public :: urbanxx_soilWater
+  public :: urbanxx_soilWater_check
 
 contains
 
@@ -224,5 +225,85 @@ contains
      end associate
 
   end subroutine urbanxx_soilWater
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_soilWater_check(num_urbanl, num_urbanc, filter_urbanc)
+    !
+    ! !DESCRIPTION:
+    ! Compare UrbanXX soil water outputs against ELM values for pervious road.
+    !
+    use ColumnType     , only : col_pp
+    use column_varcon  , only : icol_road_perv
+    use elm_varpar     , only : nlevgrnd
+    use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
+    !
+    implicit none
+    !
+    ! !ARGUMENTS:
+    integer(c_int), intent(in) :: num_urbanl
+    integer(c_int), intent(in) :: num_urbanc
+    integer       , intent(in) :: filter_urbanc(:)
+    !
+    ! !LOCAL VARIABLES:
+    real(c_double), allocatable, target :: h2osoi_liq_2d(:,:)
+    real(c_double), allocatable, target :: h2osoi_vol_2d(:,:)
+    integer  :: fc, c, j, l, count, idx_perv
+    real(r8) :: max_error_liq, max_error_vol
+
+    associate( &
+         h2osoi_liq => col_ws%h2osoi_liq , &
+         h2osoi_vol => col_ws%h2osoi_vol   &
+         )
+
+      allocate(h2osoi_liq_2d(num_urbanl, nlevgrnd))
+      allocate(h2osoi_vol_2d(num_urbanl, nlevgrnd))
+
+      ! Reshape flattened output arrays into 2D based on Kokkos layout
+      if (UrbanKokkosIsLayoutLeft()) then
+        count = 0
+        do j = 1, nlevgrnd
+          do l = 1, num_urbanl
+            count = count + 1
+            h2osoi_liq_2d(l,j) = out_h2osoi_liq(count)
+            h2osoi_vol_2d(l,j) = out_h2osoi_vol(count)
+          end do
+        end do
+      else
+        count = 0
+        do l = 1, num_urbanl
+          do j = 1, nlevgrnd
+            count = count + 1
+            h2osoi_liq_2d(l,j) = out_h2osoi_liq(count)
+            h2osoi_vol_2d(l,j) = out_h2osoi_vol(count)
+          end do
+        end do
+      end if
+
+      max_error_liq = 0._r8
+      max_error_vol = 0._r8
+      idx_perv = 0
+
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_road_perv) then
+          idx_perv = idx_perv + 1
+          do j = 1, 10!nlevgrnd
+            max_error_liq = max(max_error_liq, abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)))
+            max_error_vol = max(max_error_vol, abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
+            !write(*,*)c,j,h2osoi_liq(c,j), h2osoi_liq_2d(idx_perv,j), (h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j))
+            !write(*,*)c,j,h2osoi_vol(c,j), h2osoi_vol_2d(idx_perv,j), (h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j))
+          end do
+        end if
+      end do
+
+      write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq
+      !write(iulog,*) 'Max error in soil water (h2osoi_vol): ', max_error_vol
+
+      deallocate(h2osoi_liq_2d)
+      deallocate(h2osoi_vol_2d)
+
+    end associate
+
+  end subroutine urbanxx_soilWater_check
 
 end module UrbanxxSoilWaterMod

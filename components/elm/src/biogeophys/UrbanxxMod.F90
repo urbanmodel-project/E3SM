@@ -249,9 +249,9 @@ contains
       call UrbanSetWindHgtCanyon(urban, c_loc(windHgtCanyon), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      if (masterproc) then
-         write(*,*) 'Set height parameters'
-      end if
+      !if (masterproc) then
+      !   write(*,*) 'Set height parameters'
+      !end if
 
       deallocate(forcHgtT)
       deallocate(forcHgtU)

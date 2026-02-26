@@ -827,6 +827,7 @@ contains
                   filter(nc)%num_urbanl, &
                   filter(nc)%urbanl,     &
                   filter(nc)%num_urbanc, filter(nc)%urbanc,        &
+                  filter(nc)%num_urbanp, filter(nc)%urbanp,        &
                   surfalb_vars, urbanparams_vars, frictionvel_vars)
 
        ! Fluxes for all lake landunits

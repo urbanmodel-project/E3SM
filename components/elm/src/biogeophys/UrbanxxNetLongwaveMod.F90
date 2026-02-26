@@ -15,6 +15,8 @@ module UrbanxxNetLongwaveMod
   use FrictionVelocityType , only : frictionvel_type
   use ColumnDataType       , only : col_es, col_pp
   use UrbanxxInstanceMod   , only : urbanxx
+  use VegetationType    , only : veg_pp
+  use VegetationDataType, only : veg_ef
 
   implicit none
 
@@ -90,8 +92,9 @@ contains
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     type(frictionvel_type) , intent(in) :: frictionvel_vars
     !
-    integer                              :: fl, l, c_start, c_end, c
+    integer                              :: fl, l, c_start, c_end, c, p, p_start, p_end
     integer(c_int)                       :: status
+    real(r8)                             :: max_error
 
     associate(                       &
          ctype  =>    col_pp%itype , & ! Input:  [integer (:)    ]  column type
@@ -164,6 +167,45 @@ contains
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanGetUpwardLongwaveShadedWall(urbanxx, c_loc(lwup_shadwall), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! Scatter results back to ELM patch-indexed variables
+      max_error = 0._r8
+      do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         p_start = lun_pp%pfti(l)
+         p_end   = lun_pp%pftf(l)
+
+         do p = p_start, p_end
+            c = veg_pp%column(p)
+            select case (ctype(c))
+            case (icol_roof)
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_out(p)- lwup_roof(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net(p)- lwnet_roof(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_roof(fl)))
+            case (icol_sunwall)
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_out(p)- lwup_sunwall(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net(p)- lwnet_sunwall(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_sunwall(fl)))
+            case (icol_shadewall)
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_out(p)- lwup_shadwall(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net(p)- lwnet_shadwall(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_shadwall(fl)))
+            case (icol_road_perv)
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_out(p)- lwup_perroad(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net(p)- lwnet_perroad(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_perroad(fl)))
+            case (icol_road_imperv)
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_out(p)- lwup_improad(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net(p)- lwnet_improad(fl)))
+               max_error = max(max_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_improad(fl)))
+            end select
+         end do
+      end do
+      write(iulog,*) 'Max error in longwave fluxes        : ', max_error
+      if (max_error > 1.0e-10) then
+         write(iulog,*) 'Error exceeds tolerance! Check Urban++ net longwave computation.'
+         call exit(0)
+      end if
 
     end associate
 

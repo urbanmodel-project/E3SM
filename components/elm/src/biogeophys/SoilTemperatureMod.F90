@@ -181,7 +181,7 @@ contains
     use column_varcon            , only : icol_roof, icol_sunwall, icol_shadewall, icol_road_perv, icol_road_imperv
     use landunit_varcon          , only : istwet, istice, istice_mec, istsoil, istcrop
     use BandDiagonalMod          , only : BandDiagonal
-    use UrbanxxSoilTemperatureMod , only : urbanxx_soilTemperature
+    use UrbanxxSoilTemperatureMod , only : urbanxx_soilTemperature, urbanxx_soilTemperature_check
 
     !
     ! !ARGUMENTS:
@@ -569,6 +569,9 @@ contains
          endif
 
       enddo
+
+      call urbanxx_soilTemperature_check(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
+           filter_nolakec_and_urbanc, temperature_vars)
 
       ! Melting or Freezing
 

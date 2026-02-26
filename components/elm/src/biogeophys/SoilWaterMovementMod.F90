@@ -16,7 +16,7 @@ module SoilWaterMovementMod
   use ExternalModelInterfaceMod  , only : EMI_Driver
   use elm_instMod , only : waterflux_vars, waterstate_vars, temperature_vars
   use abortutils           , only : endrun
-  use UrbanxxSoilWaterMod          , only : urbanxx_soilWater
+  use UrbanxxSoilWaterMod          , only : urbanxx_soilWater, urbanxx_soilWater_check
 
   !
   implicit none
@@ -200,6 +200,10 @@ contains
        enddo
     enddo
     endif
+
+    ! call check for Urbanxx soil water variables
+    call urbanxx_soilWater_check(num_urbanl, num_urbanc, filter_urbanc)
+
   end associate
 
   end subroutine SoilWater
