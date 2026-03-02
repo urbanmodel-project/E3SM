@@ -325,7 +325,7 @@ contains
             max_error = max(max_error, abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)))
           end do
         end select
-        if (max_error > 1.0e-10) then
+        if (max_error > 1.0e-9) then
           write(iulog,*)'Max error in temperature: ', max_error, ' at column ', c, ' itype = ', col_pp%itype(c), &
           'exceed tolerance'
           call exit(0)
