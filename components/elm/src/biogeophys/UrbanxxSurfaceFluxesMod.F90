@@ -233,10 +233,10 @@ contains
       end if
 
    end do
-   write(iulog,*) 'Max error in SH ground      : ', eflx_sh_grnd
-   write(iulog,*) 'Max error in Evap soil      : ', qflx_evap_soi
-   write(iulog,*) 'Max error in d(SH)/dT       : ', cgrnds
-   write(iulog,*) 'Max error in d(Evap)/dT     : ', cgrndl
+   write(iulog,*) 'Max error in SH ground      : ', err_eflx_sh_grnd
+   write(iulog,*) 'Max error in Evap soil      : ', err_qflx_evap_soi
+   write(iulog,*) 'Max error in d(SH)/dT       : ', err_cgrnds
+   write(iulog,*) 'Max error in d(Evap)/dT     : ', err_cgrndl
 
    max_error = 0._r8
    do fl = 1, num_urbanl
