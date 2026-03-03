@@ -229,6 +229,26 @@ contains
          write(iulog,*) '  err_qflx_evap_soi = ', err_qflx_evap_soi
          write(iulog,*) '  err_cgrnds        = ', err_cgrnds
          write(iulog,*) '  err_cgrndl        = ', err_cgrndl
+         write(iulog,*) 'DEBUG col_type=', col_pp%itype(c), ' l=', col_pp%landunit(c)
+         write(iulog,*) 'DEBUG ELM     eflx_sh_grnd=', veg_ef%eflx_sh_grnd(p), &
+                                       ' cgrnds=',      veg_ef%cgrnds(p)
+         select case (col_pp%itype(c))
+         case (icol_roof)
+            write(iulog,*) 'DEBUG URBANxx eflx_sh_grnd=', eflx_sh_grnd_roof(idx_roof), &
+                                          ' cgrnds=',      cgrnds_roof(idx_roof)
+         case (icol_road_imperv)
+            write(iulog,*) 'DEBUG URBANxx eflx_sh_grnd=', eflx_sh_grnd_improad(idx_road_improv), &
+                                          ' cgrnds=',      cgrnds_improad(idx_road_improv)
+         case (icol_road_perv)
+            write(iulog,*) 'DEBUG URBANxx eflx_sh_grnd=', eflx_sh_grnd_perroad(idx_road_perv), &
+                                          ' cgrnds=',      cgrnds_perroad(idx_road_perv)
+         case (icol_sunwall)
+            write(iulog,*) 'DEBUG URBANxx eflx_sh_grnd=', eflx_sh_grnd_sunwall(idx_sunwall), &
+                                          ' cgrnds=',      cgrnds_sunwall(idx_sunwall)
+         case (icol_shadewall)
+            write(iulog,*) 'DEBUG URBANxx eflx_sh_grnd=', eflx_sh_grnd_shadwall(idx_shadwall), &
+                                          ' cgrnds=',      cgrnds_shadwall(idx_shadwall)
+         end select
          call exit(0)
       end if
 
