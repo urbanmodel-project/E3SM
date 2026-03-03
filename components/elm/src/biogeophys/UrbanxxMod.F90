@@ -664,9 +664,11 @@ contains
                  clay(idx) = cellclay(c, j)
                  organic(idx) = cellorg(c, j)
                else
-                 ! Below bedrock: set sand to 100%, clay to 0%
-                 sand(idx) = 100.0_r8
-                 clay(idx) = 0.0_r8
+                 ! Below bedrock: ELM duplicates last active soil layer sand/clay to
+                 ! compute watsat for bedrock layers while overriding csol=csol_bedrock.
+                 ! Match that here so URBANxx watsat at bedrock equals ELM's watsat.
+                 sand(idx) = cellsand(c, nlevbed)
+                 clay(idx) = cellclay(c, nlevbed)
                  organic(idx) = 0.0_r8
                end if
              end if
@@ -687,9 +689,9 @@ contains
                  clay(idx) = cellclay(c, j)
                  organic(idx) = cellorg(c, j)
                else
-                 ! Below bedrock: set sand to 100%, clay to 0%
-                 sand(idx) = 100.0_r8
-                 clay(idx) = 0.0_r8
+                 ! Below bedrock: duplicate last active layer texture (see ELM SoilStateType.F90)
+                 sand(idx) = cellsand(c, nlevbed)
+                 clay(idx) = cellclay(c, nlevbed)
                  organic(idx) = 0.0_r8
                end if
              end do
