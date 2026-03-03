@@ -248,7 +248,7 @@ contains
     real(c_double), allocatable, target :: h2osoi_liq_2d(:,:)
     real(c_double), allocatable, target :: h2osoi_vol_2d(:,:)
     integer  :: fc, c, j, l, count, idx_perv
-    real(r8) :: max_error_liq, max_error_vol
+    real(r8) :: max_error_liq, max_error_vol, max_rel_error_liq
 
     associate( &
          h2osoi_liq => col_ws%h2osoi_liq , &
@@ -279,8 +279,9 @@ contains
         end do
       end if
 
-      max_error_liq = 0._r8
-      max_error_vol = 0._r8
+      max_error_liq     = 0._r8
+      max_error_vol     = 0._r8
+      max_rel_error_liq = 0._r8
       idx_perv = 0
 
       do fc = 1, num_urbanc
@@ -288,15 +289,16 @@ contains
         if (col_pp%itype(c) == icol_road_perv) then
           idx_perv = idx_perv + 1
           do j = 1, 10!nlevgrnd
-            max_error_liq = max(max_error_liq, abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)))
-            max_error_vol = max(max_error_vol, abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
+            max_error_liq     = max(max_error_liq,     abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)))
+            max_rel_error_liq = max(max_rel_error_liq, abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)) / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
+            max_error_vol     = max(max_error_vol,     abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
             !write(*,*)c,j,h2osoi_liq(c,j), h2osoi_liq_2d(idx_perv,j), (h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j))
             !write(*,*)c,j,h2osoi_vol(c,j), h2osoi_vol_2d(idx_perv,j), (h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j))
           end do
         end if
       end do
 
-      write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq
+      write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
       !write(iulog,*) 'Max error in soil water (h2osoi_vol): ', max_error_vol
 
       deallocate(h2osoi_liq_2d)

@@ -238,14 +238,15 @@ contains
     integer(c_int)                       :: status
     integer                              :: fc, c, j, fl, l
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
-    real(r8)                             :: max_error
+    real(r8)                             :: max_error, max_rel_error
     integer :: idx_roof, idx_road_imperv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
     integer :: count
 
     associate(                          &
          t_soisno                => col_es%t_soisno  & ! Output: [real(r8) (:,:) ]  soil temperature (Kelvin)
         )
-    max_error = 0._r8
+    max_error     = 0._r8
+    max_rel_error = 0._r8
     idx_roof = 0
     idx_road_imperv = 0
     idx_road_perv = 0
@@ -302,27 +303,32 @@ contains
         case (icol_roof)
           idx_roof = idx_roof + 1
           do j = 1, nlevurb
-            max_error = max(max_error, abs(t_soisno(c,j) - layertemp_roof_2d(idx_roof,j)))
+            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_roof_2d(idx_roof,j)))
+            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_roof_2d(idx_roof,j))     / max(abs(t_soisno(c,j)), 1.0e-20_r8))
           end do
         case (icol_sunwall)
           idx_sunwall = idx_sunwall + 1
           do j = 1, nlevurb
-            max_error = max(max_error, abs(t_soisno(c,j) - layertemp_sunwall_2d(idx_sunwall,j)))
+            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_sunwall_2d(idx_sunwall,j)))
+            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_sunwall_2d(idx_sunwall,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
           end do
         case (icol_shadewall)
           idx_shadwall = idx_shadwall + 1
           do j = 1, nlevurb
-            max_error = max(max_error, abs(t_soisno(c,j) - layertemp_shadwall_2d(idx_shadwall,j)))
+            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_shadwall_2d(idx_shadwall,j)))
+            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_shadwall_2d(idx_shadwall,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
           end do
         case (icol_road_imperv)
           idx_road_imperv = idx_road_imperv + 1
           do j = 1, nlevgrnd
-            max_error = max(max_error, abs(t_soisno(c,j) - layertemp_improad_2d(idx_road_imperv,j)))
+            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_improad_2d(idx_road_imperv,j)))
+            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_improad_2d(idx_road_imperv,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
           end do
         case (icol_road_perv)
           idx_road_perv = idx_road_perv + 1
           do j = 1, nlevgrnd
-            max_error = max(max_error, abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)))
+            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)))
+            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
           end do
         end select
         if (max_error > 1.0e-9) then
@@ -331,7 +337,7 @@ contains
           call exit(0)
         endif
       end do
-      write(iulog,*) 'Max error in soil temperatures      : ', max_error
+      write(iulog,*) 'Max error in soil temperatures      : ', max_error, ' (rel: ', max_rel_error, ')'
 
       deallocate(layertemp_roof_2d)
       deallocate(layertemp_sunwall_2d)

@@ -114,8 +114,9 @@ contains
     !
     integer(c_int)                       :: status
     integer                              :: fp, c, p, fl, l
-    real(r8)                             :: max_error
+    real(r8)                             :: max_error, max_rel_error
     real(r8)                             :: err_eflx_sh_grnd, err_qflx_evap_soi, err_cgrnds, err_cgrndl
+    real(r8)                             :: rel_eflx_sh_grnd, rel_qflx_evap_soi, rel_cgrnds, rel_cgrndl
     integer :: idx_roof, idx_road_improv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
 
     call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
@@ -185,6 +186,10 @@ contains
    err_qflx_evap_soi = 0._r8
    err_cgrnds        = 0._r8
    err_cgrndl        = 0._r8
+   rel_eflx_sh_grnd  = 0._r8
+   rel_qflx_evap_soi = 0._r8
+   rel_cgrnds        = 0._r8
+   rel_cgrndl        = 0._r8
 
    do fp = 1, num_urbanp
 
@@ -198,28 +203,46 @@ contains
          err_qflx_evap_soi = abs(veg_wf%qflx_evap_soi(p)  - qflx_evap_soi_roof(idx_roof))
          err_cgrnds        = abs(veg_ef%cgrnds(p)          - cgrnds_roof(idx_roof))
          err_cgrndl        = abs(veg_ef%cgrndl(p)          - cgrndl_roof(idx_roof))
+         rel_eflx_sh_grnd  = err_eflx_sh_grnd  / max(abs(veg_ef%eflx_sh_grnd(p)),  1.0e-20_r8)
+         rel_qflx_evap_soi = err_qflx_evap_soi / max(abs(veg_wf%qflx_evap_soi(p)), 1.0e-20_r8)
+         rel_cgrnds        = err_cgrnds        / max(abs(veg_ef%cgrnds(p)),          1.0e-20_r8)
+         rel_cgrndl        = err_cgrndl        / max(abs(veg_ef%cgrndl(p)),          1.0e-20_r8)
       case (icol_road_imperv)
          idx_road_improv = idx_road_improv + 1
          err_eflx_sh_grnd  = abs(veg_ef%eflx_sh_grnd(p)   - eflx_sh_grnd_improad(idx_road_improv))
          err_qflx_evap_soi = abs(veg_wf%qflx_evap_soi(p)  - qflx_evap_soi_improad(idx_road_improv))
          err_cgrnds        = abs(veg_ef%cgrnds(p)          - cgrnds_improad(idx_road_improv))
          err_cgrndl        = abs(veg_ef%cgrndl(p)          - cgrndl_improad(idx_road_improv))
+         rel_eflx_sh_grnd  = err_eflx_sh_grnd  / max(abs(veg_ef%eflx_sh_grnd(p)),  1.0e-20_r8)
+         rel_qflx_evap_soi = err_qflx_evap_soi / max(abs(veg_wf%qflx_evap_soi(p)), 1.0e-20_r8)
+         rel_cgrnds        = err_cgrnds        / max(abs(veg_ef%cgrnds(p)),          1.0e-20_r8)
+         rel_cgrndl        = err_cgrndl        / max(abs(veg_ef%cgrndl(p)),          1.0e-20_r8)
       case (icol_road_perv)
          idx_road_perv = idx_road_perv + 1
          err_eflx_sh_grnd  = abs(veg_ef%eflx_sh_grnd(p)   - eflx_sh_grnd_perroad(idx_road_perv))
          err_qflx_evap_soi = abs(veg_wf%qflx_evap_soi(p)  - qflx_evap_soi_perroad(idx_road_perv))
          err_cgrnds        = abs(veg_ef%cgrnds(p)          - cgrnds_perroad(idx_road_perv))
          err_cgrndl        = abs(veg_ef%cgrndl(p)          - cgrndl_perroad(idx_road_perv))
+         rel_eflx_sh_grnd  = err_eflx_sh_grnd  / max(abs(veg_ef%eflx_sh_grnd(p)),  1.0e-20_r8)
+         rel_qflx_evap_soi = err_qflx_evap_soi / max(abs(veg_wf%qflx_evap_soi(p)), 1.0e-20_r8)
+         rel_cgrnds        = err_cgrnds        / max(abs(veg_ef%cgrnds(p)),          1.0e-20_r8)
+         rel_cgrndl        = err_cgrndl        / max(abs(veg_ef%cgrndl(p)),          1.0e-20_r8)
       case (icol_sunwall)
          idx_sunwall = idx_sunwall + 1
          err_eflx_sh_grnd = abs(veg_ef%eflx_sh_grnd(p)    - eflx_sh_grnd_sunwall(idx_sunwall))
          err_cgrnds       = abs(veg_ef%cgrnds(p)           - cgrnds_sunwall(idx_sunwall))
          err_cgrndl       = abs(veg_ef%cgrndl(p)           - cgrndl_sunwall(idx_sunwall))
+         rel_eflx_sh_grnd = err_eflx_sh_grnd / max(abs(veg_ef%eflx_sh_grnd(p)), 1.0e-20_r8)
+         rel_cgrnds       = err_cgrnds       / max(abs(veg_ef%cgrnds(p)),        1.0e-20_r8)
+         rel_cgrndl       = err_cgrndl       / max(abs(veg_ef%cgrndl(p)),        1.0e-20_r8)
       case (icol_shadewall)
          idx_shadwall = idx_shadwall + 1
          err_eflx_sh_grnd = abs(veg_ef%eflx_sh_grnd(p)    - eflx_sh_grnd_shadwall(idx_shadwall))
          err_cgrnds       = abs(veg_ef%cgrnds(p)           - cgrnds_shadwall(idx_shadwall))
          err_cgrndl       = abs(veg_ef%cgrndl(p)           - cgrndl_shadwall(idx_shadwall))
+         rel_eflx_sh_grnd = err_eflx_sh_grnd / max(abs(veg_ef%eflx_sh_grnd(p)), 1.0e-20_r8)
+         rel_cgrnds       = err_cgrnds       / max(abs(veg_ef%cgrnds(p)),        1.0e-20_r8)
+         rel_cgrndl       = err_cgrndl       / max(abs(veg_ef%cgrndl(p)),        1.0e-20_r8)
       end select
 
       if (err_eflx_sh_grnd > 1.0e-10_r8 .or. err_qflx_evap_soi > 1.0e-10_r8 .or. &
@@ -253,18 +276,21 @@ contains
       end if
 
    end do
-   write(iulog,*) 'Max error in SH ground      : ', err_eflx_sh_grnd
-   write(iulog,*) 'Max error in Evap soil      : ', err_qflx_evap_soi
-   write(iulog,*) 'Max error in d(SH)/dT       : ', err_cgrnds
-   write(iulog,*) 'Max error in d(Evap)/dT     : ', err_cgrndl
+   write(iulog,*) 'Max error in SH ground              : ', err_eflx_sh_grnd,  ' (rel: ', rel_eflx_sh_grnd,  ')'
+   write(iulog,*) 'Max error in Evap soil              : ', err_qflx_evap_soi, ' (rel: ', rel_qflx_evap_soi, ')'
+   write(iulog,*) 'Max error in d(SH)/dT               : ', err_cgrnds,        ' (rel: ', rel_cgrnds,        ')'
+   write(iulog,*) 'Max error in d(Evap)/dT             : ', err_cgrndl,        ' (rel: ', rel_cgrndl,        ')'
 
    max_error = 0._r8
+   max_rel_error = 0._r8
    do fl = 1, num_urbanl
       l = filter_urbanl(fl)
-      max_error = max(max_error, abs(lun_es%taf(l) - taf(fl)))
-      max_error = max(max_error, abs(lun_ws%qaf(l) - qaf(fl)))
+      max_error     = max(max_error,     abs(lun_es%taf(l) - taf(fl)))
+      max_error     = max(max_error,     abs(lun_ws%qaf(l) - qaf(fl)))
+      max_rel_error = max(max_rel_error, abs(lun_es%taf(l) - taf(fl)) / max(abs(lun_es%taf(l)), 1.0e-20_r8))
+      max_rel_error = max(max_rel_error, abs(lun_ws%qaf(l) - qaf(fl)) / max(abs(lun_ws%qaf(l)), 1.0e-20_r8))
    end do
-   write(iulog,*) 'Max error in surface Taf, Qaf       : ', max_error
+   write(iulog,*) 'Max error in surface Taf, Qaf       : ', max_error,    ' (rel: ', max_rel_error, ')'
    if (max_error > 1.0e-10) then
       write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface Taf/Qaf computation.'
       call exit(0)
