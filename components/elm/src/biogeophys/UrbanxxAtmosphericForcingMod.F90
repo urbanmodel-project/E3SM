@@ -17,6 +17,7 @@ module UrbanxxAtmosphericForcingMod
   use TopounitDataType     , only : top_as, top_af
   use UrbanxxInstanceMod   , only : urbanxx, numBands, numTypes
   use UrbanxxMod           , only : SetHeightParameters
+  use TopounitDataType     , only : topounit_atmospheric_state
 
   implicit none
 
@@ -69,7 +70,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, surfalb_vars, &
-         urbanparams_vars, frictionvel_vars)
+         urbanparams_vars, top_as)
     !
     implicit none
     !
@@ -77,7 +78,7 @@ contains
     integer            , intent(in) :: filter_urbanl(:)         ! urban landunit filter
     type(surfalb_type) , intent(in) :: surfalb_vars
     type(urbanparams_type) , intent(in)    :: urbanparams_vars
-    type(frictionvel_type) , intent(in)    :: frictionvel_vars
+    type(topounit_atmospheric_state) , intent(in)    :: top_as
 
     !
     integer(c_int)                       :: status
@@ -196,7 +197,7 @@ contains
       end if
 
       call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
-         urbanparams_vars, frictionvel_vars)
+         urbanparams_vars, top_as)
 
     end associate
 

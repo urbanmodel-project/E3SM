@@ -763,7 +763,7 @@ contains
         call urbanxx_SetAtmosphericForcing( &
                   filter(nc)%num_urbanl, &
                   filter(nc)%urbanl,     &
-                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+                  surfalb_vars, urbanparams_vars, top_as)
         call urbanxx_netLongwave( &
                   filter(nc)%num_urbanl, &
                   filter(nc)%urbanl,     &

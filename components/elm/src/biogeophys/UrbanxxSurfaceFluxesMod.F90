@@ -119,8 +119,6 @@ contains
     real(r8)                             :: rel_eflx_sh_grnd, rel_qflx_evap_soi, rel_cgrnds, rel_cgrndl
     integer :: idx_roof, idx_road_improv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
 
-    call SetHeightParameters(urbanxx, num_urbanl, filter_urbanl, &
-       urbanparams_vars, frictionvel_vars)
     call SetFwetValues(urbanxx, num_urbanl, num_urbanc, filter_urbanc)
 
     call UrbanComputeSurfaceFluxes(urbanxx, status)

@@ -18,6 +18,7 @@ module UrbanxxMod
   use SoilStateType        , only : soilstate_type
   use abortutils           , only : endrun
   use UrbanxxInstanceMod   , only : urbanxx, numBands, numTypes
+  use TopounitDataType     , only : topounit_atmospheric_state
 
   implicit none
 
@@ -30,7 +31,7 @@ contains
   !-----------------------------------------------------------------------
   subroutine urbanxx_initialize(bounds, num_urbanl, filter_urbanl, &
        num_urbanc, filter_urbanc, num_urbanp, filter_urbanp, &
-       urbanparams_vars, solarabs_vars, surfalb_vars, frictionvel_vars, &
+       urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
        soilstate_vars)
     implicit none
     !
@@ -45,7 +46,7 @@ contains
     type(urbanparams_type) , intent(in) :: urbanparams_vars
     type(solarabs_type)    , intent(in) :: solarabs_vars
     type(surfalb_type)     , intent(in) :: surfalb_vars
-    type(frictionvel_type) , intent(in) :: frictionvel_vars
+    type(topounit_atmospheric_state) , intent(in) :: top_as
     type(soilstate_type)   , intent(in) :: soilstate_vars
 
     integer :: status
@@ -66,7 +67,7 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
-         urbanparams_vars, frictionvel_vars, soilstate_vars)
+         urbanparams_vars, top_as, soilstate_vars)
 
     ! Setup urban model (initialize temperatures and other setup tasks)
     call UrbanSetup(urbanxx, status)
@@ -190,7 +191,7 @@ contains
 
   !-----------------------------------------------------------------------
   subroutine SetHeightParameters(urban, num_urbanl, filter_urbanl, &
-       urbanparams_vars, frictionvel_vars)
+       urbanparams_vars, top_as)
     !
     implicit none
     !
@@ -198,10 +199,10 @@ contains
     integer(c_int)         , intent(in) :: num_urbanl
     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
     type(urbanparams_type) , intent(in) :: urbanparams_vars
-    type(frictionvel_type) , intent(in) :: frictionvel_vars
+    type(topounit_atmospheric_state) , intent(in) :: top_as
     !
     integer(c_int)                       :: status
-    integer                              :: fl, fp, l, p
+    integer                              :: fl, fp, l, p, t
     real(c_double) , allocatable, target :: forcHgtT(:)
     real(c_double) , allocatable, target :: forcHgtU(:)
     real(c_double) , allocatable, target :: zDTown(:)
@@ -210,8 +211,9 @@ contains
     real(c_double) , allocatable, target :: windHgtCanyon(:)
 
     associate(                                                          &
-         forc_hgt_u_patch => frictionvel_vars%forc_hgt_u_patch       , & ! Input: [real(r8) (:)] observational height of wind at pft-level (m)
-         forc_hgt_t_patch => frictionvel_vars%forc_hgt_t_patch       , & ! Input: [real(r8) (:)] observational height of temperature at pft-level (m)
+         forc_hgt_t       => top_as%zbot                              , & ! Input:  [real(r8) (:)   ] observational height of temperature [m]
+         forc_hgt_u       => top_as%zbot                              , & ! Input:  [real(r8) (:)   ] observational height of wind [m]
+         forc_hgt_q       => top_as%zbot                              , & ! Input:  [real(r8) (:)   ] observational height of specific humidity [m]
          z_d_town         => lun_pp%z_d_town                          , & ! Input: [real(r8) (:)] displacement height of urban landunit (m)
          z_0_town         => lun_pp%z_0_town                          , & ! Input: [real(r8) (:)] momentum roughness length of urban landunit (m)
          ht_roof          => lun_pp%ht_roof                           , & ! Input: [real(r8) (:)] height of urban roof (m)
@@ -228,8 +230,9 @@ contains
       ! Extract values from patches to landunits - use first urban patch for each landunit
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
-         forcHgtT(fl)      = forc_hgt_t_patch(lun_pp%pfti(l))
-         forcHgtU(fl)      = forc_hgt_u_patch(lun_pp%pfti(l))
+         t = lun_pp%topounit(l)
+         forcHgtT(fl)      = forc_hgt_t(t) + z_0_town(l) + z_d_town(l)
+         forcHgtU(fl)      = forc_hgt_u(t) + z_0_town(l) + z_d_town(l)
          zDTown(fl)        = z_d_town(l)
          z0Town(fl)        = z_0_town(l)
          htRoof(fl)        = ht_roof(l)
@@ -1086,7 +1089,7 @@ contains
 
    !-----------------------------------------------------------------------
    subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
-        urbanparams_vars, frictionvel_vars, soilstate_vars)
+        urbanparams_vars, top_as, soilstate_vars)
      !
      implicit none
      !
@@ -1096,14 +1099,14 @@ contains
      integer(c_int)         , intent(in)    :: num_urbanc
      integer                , intent(in)    :: filter_urbanc(:) ! urban column filter
      type(urbanparams_type) , intent(in)    :: urbanparams_vars
-     type(frictionvel_type) , intent(in)    :: frictionvel_vars
+     type(topounit_atmospheric_state) , intent(in)    :: top_as
      type(soilstate_type)   , intent(in)    :: soilstate_vars
 
      call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
      call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
      call SetWtRoof(urban, num_urbanl, filter_urbanl)
      call SetHeightParameters(urban, num_urbanl, filter_urbanl, &
-          urbanparams_vars, frictionvel_vars)
+          urbanparams_vars, top_as)
      call SetAlbedo(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetEmissivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
