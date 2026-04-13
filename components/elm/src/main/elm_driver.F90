@@ -763,6 +763,7 @@ contains
         call urbanxx_SetAtmosphericForcing( &
                   filter(nc)%num_urbanl, &
                   filter(nc)%urbanl,     &
+                  nextsw_cday, declinp1, &
                   surfalb_vars, urbanparams_vars, top_as)
         call urbanxx_netLongwave( &
                   filter(nc)%num_urbanl, &
@@ -1428,8 +1429,7 @@ contains
 
              call urbanxx_netShortwave( &
                   filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl,     &
-                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+                  filter(nc)%urbanl)
           end if
 
        end if

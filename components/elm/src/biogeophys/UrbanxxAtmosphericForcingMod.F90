@@ -18,6 +18,7 @@ module UrbanxxAtmosphericForcingMod
   use UrbanxxInstanceMod   , only : urbanxx, numBands, numTypes
   use UrbanxxMod           , only : SetHeightParameters
   use TopounitDataType     , only : topounit_atmospheric_state
+  use GridcellType         , only : grc_pp
 
   implicit none
 
@@ -69,8 +70,10 @@ contains
   end subroutine urbanxx_SetAtmosphericForcing_init
 
   !-----------------------------------------------------------------------
-  subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, surfalb_vars, &
+  subroutine urbanxx_SetAtmosphericForcing(num_urbanl, filter_urbanl, nextsw_cday  , declinp1, surfalb_vars, &
          urbanparams_vars, top_as)
+    !
+    use shr_orb_mod, only : shr_orb_cosz
     !
     implicit none
     !
@@ -82,10 +85,12 @@ contains
 
     !
     integer(c_int)                       :: status
-    integer                              :: fl, l, t, iband, itype, idx
+    integer                              :: fl, l, t, g, iband, itype, idx
     integer(c_int)                       :: totalSize3D
     integer(c_int), dimension(3)         :: size3D
     logical(c_bool)                      :: isLayoutLeft
+    real(r8), intent(in) :: nextsw_cday        ! calendar day at Greenwich (1.00, ..., days/year)
+    real(r8), intent(in) :: declinp1           ! declination angle (radians) for next time step
 
     associate(                                                        &
          forc_t     => top_as%tbot     , & ! Input: [real(r8) (:)] atmospheric temperature (K)
@@ -109,6 +114,7 @@ contains
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
          t = lun_pp%topounit(l)
+         g = lun_pp%gridcell(l)
 
          atmTemp(fl)     = forc_t(t)
          atmPotTemp(fl)  = forc_th(t)
@@ -117,7 +123,7 @@ contains
          atmPress(fl)    = forc_pbot(t)
          atmWindU(fl)    = forc_u(t)
          atmWindV(fl)    = forc_v(t)
-         atmCoszen(fl)   = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
+         atmCoszen(fl)   = shr_orb_cosz (nextsw_cday, grc_pp%lat(g), grc_pp%lon(g), declinp1)
          atmFracSnow(fl) = forc_snow(t)
          atmLongwave(fl) = forc_lwrad(t)
       end do

@@ -57,48 +57,31 @@ contains
   end subroutine urbanxx_netShortwave_init
 
   !-----------------------------------------------------------------------
-  subroutine urbanxx_netShortwave(num_urbanl, filter_urbanl, surfalb_vars, &
-         urbanparams_vars, frictionvel_vars)
+  subroutine urbanxx_netShortwave(num_urbanl, filter_urbanl)
     !
     implicit none
     !
     integer(c_int)         , intent(in)  :: num_urbanl
     integer                , intent(in)  :: filter_urbanl(:)         ! urban landunit filter
-    type(surfalb_type)     , intent(in)  :: surfalb_vars
-    type(urbanparams_type) , intent(in)  :: urbanparams_vars
-    type(frictionvel_type) , intent(in)  :: frictionvel_vars
     !
     integer(c_int)                       :: status
-    integer                              :: fl, l
 
-    associate(                  &
-         coli =>    lun_pp%coli & ! Input:  [integer (:)    ]  beginning column index for landunit
-         )
 
-      ! Fill arrays with values from ELM data structures
-      do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         atmCoszen(fl)   = surfalb_vars%coszen_col(coli(l))  ! Assumes coszen for each column are the same
-      end do
+    call UrbanComputeNetShortwave(urbanxx, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetAtmCoszen(urbanxx, c_loc(atmCoszen), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanComputeNetShortwave(urbanxx, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    ! Extract net shortwave radiation from UrbanXX
+    call UrbanGetNetShortwaveRoof(urbanxx, c_loc(swnet_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetNetShortwaveImperviousRoad(urbanxx, c_loc(swnet_improad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetNetShortwavePerviousRoad(urbanxx, c_loc(swnet_perroad), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetNetShortwaveSunlitWall(urbanxx, c_loc(swnet_sunwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetNetShortwaveShadedWall(urbanxx, c_loc(swnet_shadwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! Extract net shortwave radiation from UrbanXX
-      call UrbanGetNetShortwaveRoof(urbanxx, c_loc(swnet_roof), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanGetNetShortwaveImperviousRoad(urbanxx, c_loc(swnet_improad), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanGetNetShortwavePerviousRoad(urbanxx, c_loc(swnet_perroad), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanGetNetShortwaveSunlitWall(urbanxx, c_loc(swnet_sunwall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-      call UrbanGetNetShortwaveShadedWall(urbanxx, c_loc(swnet_shadwall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    end associate
   end subroutine urbanxx_netShortwave
 
 end module UrbanxxNetShortwaveMod
