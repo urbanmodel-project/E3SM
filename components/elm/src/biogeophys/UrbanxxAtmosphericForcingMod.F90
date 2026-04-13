@@ -36,6 +36,8 @@ module UrbanxxAtmosphericForcingMod
   real(c_double) , allocatable, target :: atmFracSnow(:)
   real(c_double) , allocatable, target :: atmLongwave(:)
   real(c_double) , allocatable, target :: atmShortwave(:)
+  real(c_double) , allocatable, target :: atmRain(:)
+  real(c_double) , allocatable, target :: atmSnow(:)
 
   public :: urbanxx_SetAtmosphericForcing_init
   public :: urbanxx_SetAtmosphericForcing
@@ -63,6 +65,8 @@ contains
     allocate(atmCoszen(num_urbanl))
     allocate(atmFracSnow(num_urbanl))
     allocate(atmLongwave(num_urbanl))
+    allocate(atmRain(num_urbanl))
+    allocate(atmSnow(num_urbanl))
 
     totalSize3D = num_urbanl * numBands * numTypes
     allocate(atmShortwave(totalSize3D))
@@ -102,6 +106,7 @@ contains
          forc_v     => top_as%vbot     , & ! Input: [real(r8) (:)] atmospheric wind speed in north direction (m/s)
          forc_lwrad => top_af%lwrad_pp , & ! Input: [real(r8) (:)] downward infrared (longwave) radiation under PP (W/m**2)
          forc_snow  => top_af%snow     , & ! Input: [real(r8) (:)] downscaled snow
+         forc_rain  => top_af%rain     , & ! Input: [real(r8) (:)] downscaled rain
          forc_solad => top_af%solad_pp , & ! Input: [real(r8) (:,:)] direct beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
          forc_solai => top_af%solai_pp , & ! Input: [real(r8) (:,:)] diffuse beam radiation under PP (vis=forc_sols , nir=forc_soll ) (W/m**2)
          coli       => lun_pp%coli                           & ! Input: [integer (:)] beginning column index for landunit
@@ -124,7 +129,13 @@ contains
          atmWindU(fl)    = forc_u(t)
          atmWindV(fl)    = forc_v(t)
          atmCoszen(fl)   = shr_orb_cosz (nextsw_cday, grc_pp%lat(g), grc_pp%lon(g), declinp1)
-         atmFracSnow(fl) = forc_snow(t)
+         atmRain(fl)     = forc_rain(t)
+         atmSnow(fl)     = forc_snow(t)
+         if ((forc_snow(t) + forc_rain(t)) > 0._r8) then
+            atmFracSnow(fl) = forc_snow(t) / (forc_snow(t) + forc_rain(t))
+         else
+            atmFracSnow(fl) = 0._r8
+         end if
          atmLongwave(fl) = forc_lwrad(t)
       end do
 
@@ -191,6 +202,10 @@ contains
       call UrbanSetAtmFracSnow(urbanxx, c_loc(atmFracSnow), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetAtmLongwaveDown(urbanxx, c_loc(atmLongwave), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmRain(urbanxx, c_loc(atmRain), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanSetAtmSnow(urbanxx, c_loc(atmSnow), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanSetAtmShortwaveDown(urbanxx, c_loc(atmShortwave), size3D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
