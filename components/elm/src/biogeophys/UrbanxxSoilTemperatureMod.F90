@@ -168,13 +168,13 @@ contains
         end do
       end if
 
-      call UrbanSetSoilLiquidWater(urbanxx, c_loc(h2oLiq), size2D_soil, status)
+      call UrbanSetSoilLiquidWaterForPerviousRoad(urbanxx, c_loc(h2oLiq), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetSoilIceContent(urbanxx, c_loc(h2oIce), size2D_soil, status)
+      call UrbanSetSoilIceContentForPerviousRoad(urbanxx, c_loc(h2oIce), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetSoilVolumetricWater(urbanxx, c_loc(h2oVol), size2D_soil, status)
+      call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeHeatDiffusion(urbanxx, status)

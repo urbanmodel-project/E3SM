@@ -19,7 +19,6 @@ module UrbanxxSoilWaterMod
   private
 
   ! Persistent input buffers (allocated once in init)
-  real(c_double) , allocatable, target :: qflxInfl(:)
   real(c_double) , allocatable, target :: zwt(:)
   real(c_double) , allocatable, target :: qflxTran(:)
   real(c_double) , allocatable, target :: h2oLiq(:)
@@ -56,7 +55,6 @@ contains
     totalSize = num_urbanl * nlevgrnd
 
     ! Input buffers — 1D
-    allocate(qflxInfl(num_urbanl))
     allocate(zwt(num_urbanl))
 
     ! Input buffers — 2D flattened
@@ -105,7 +103,6 @@ contains
     logical(c_bool)                      :: isLayoutLeft
 
     associate(                             &
-         qflx_infl    => col_wf%qflx_infl    , & ! Input: [real(r8) (:)] infiltration (mm H2O /s)
          qflx_rootsoi => col_wf%qflx_rootsoi , & ! Input: [real(r8) (:,:)] vegetation/soil water exchange (mm H2O/s) (+ = to atm)
          nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
          h2osoi_ice   => col_ws%h2osoi_ice   , & ! Input: [real(r8) (:,:)] ice lens (kg/m2)
@@ -114,22 +111,17 @@ contains
          zwt_col      => soilhydrology_vars%zwt_col & ! Input: [real(r8) (:)] water table depth (m)
          )
 
-      ! Set infiltration flux (1D: per landunit)
-
-      ! Loop through urban columns and extract infiltration flux for pervious road
+      ! Pack water table depth for pervious road columns
+      ! (QflxInfl is already set by urbanxx_infiltration which runs before this)
       idx_perv = 0
       do fc = 1, num_urbanc
         c = filter_urbanc(fc)
 
         if (col_pp%itype(c) == icol_road_perv) then
            idx_perv = idx_perv + 1
-           qflxInfl(idx_perv) = qflx_infl(c)
            zwt(idx_perv) = zwt_col(c)
         end if
       end do
-
-      call UrbanSetInfiltrationFlux(urbanxx, c_loc(qflxInfl), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanSetWaterTableDepth(urbanxx, c_loc(zwt), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -194,16 +186,16 @@ contains
         end do
       end if
 
-      call UrbanSetSoilLiquidWater(urbanxx, c_loc(h2oLiq), size2D, status)
+      call UrbanSetSoilLiquidWaterForPerviousRoad(urbanxx, c_loc(h2oLiq), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetSoilIceContent(urbanxx, c_loc(h2oIce), size2D, status)
+      call UrbanSetSoilIceContentForPerviousRoad(urbanxx, c_loc(h2oIce), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetSoilVolumetricWater(urbanxx, c_loc(h2oVol), size2D, status)
+      call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetTranspirationFlux(urbanxx, c_loc(qflxTran), size2D, status)
+      call UrbanSetTranspirationFluxForPerviousRoad(urbanxx, c_loc(qflxTran), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeHydrology(urbanxx, dtime, status)

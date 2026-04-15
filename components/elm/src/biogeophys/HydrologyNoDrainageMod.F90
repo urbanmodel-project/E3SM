@@ -77,6 +77,7 @@ contains
     use SoilHydrologyMod         , only : ELMVICMap, SurfaceRunoff, Infiltration, WaterTable
     use SoilWaterMovementMod     , only : SoilWater
     use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff, urbanxx_surfaceRunoff_check
+    use UrbanxxInfiltrationMod   , only : urbanxx_infiltration, urbanxx_infiltration_check
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use elm_varctl           , only : use_vsfm
     use SoilHydrologyMod     , only : DrainageVSFM
@@ -206,6 +207,8 @@ contains
         call Infiltration(bounds, num_hydrononsoic, filter_hydrononsoic,          &
              num_urbanc, filter_urbanc, atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, &
              energyflux_vars, soilhydrology_vars, soilstate_vars, dtime)
+        call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
+        call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
 
       else
       !------------------------------------------------------------------------------------
@@ -213,6 +216,8 @@ contains
         call Infiltration(bounds, num_hydrologyc, filter_hydrologyc,              &
              num_urbanc, filter_urbanc, atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, &
              energyflux_vars, soilhydrology_vars, soilstate_vars, dtime)
+        call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
+        call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
 
       !------------------------------------------------------------------------------------
       end if
