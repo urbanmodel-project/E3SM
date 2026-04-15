@@ -1188,6 +1188,7 @@ contains
     use UrbanxxSoilWaterMod      , only : urbanxx_soilWater_init
     use UrbanxxSoilFluxesMod     , only : urbanxx_soilFluxes_init
     use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing_init
+    use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff_init
 
     implicit none
 
@@ -1261,6 +1262,7 @@ contains
       call urbanxx_soilWater_init(filter_inactive_and_active(nc)%num_urbanl)
       call urbanxx_soilFluxes_init(filter_inactive_and_active(nc)%num_urbanl)
       call urbanxx_SetAtmosphericForcing_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_surfaceRunoff_init(filter_inactive_and_active(nc)%num_urbanl)
     end do
 
     call t_stopf('elm_init3')

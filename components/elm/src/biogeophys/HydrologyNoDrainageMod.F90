@@ -74,8 +74,9 @@ contains
     use elm_varpar           , only : nlevgrnd, nlevsno, nlevsoi, nlevurb
     use SnowHydrologyMod     , only : SnowCompaction, CombineSnowLayers, DivideSnowLayers, DivideExtraSnowLayers, SnowCapping
     use SnowHydrologyMod     , only : SnowWater, BuildSnowFilter 
-    use SoilHydrologyMod     , only : ELMVICMap, SurfaceRunoff, Infiltration, WaterTable
-    use SoilWaterMovementMod , only : SoilWater
+    use SoilHydrologyMod         , only : ELMVICMap, SurfaceRunoff, Infiltration, WaterTable
+    use SoilWaterMovementMod     , only : SoilWater
+    use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff, urbanxx_surfaceRunoff_check
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use elm_varctl           , only : use_vsfm
     use SoilHydrologyMod     , only : DrainageVSFM
@@ -195,6 +196,9 @@ contains
 
       call SurfaceRunoff(bounds, num_hydrologyc, filter_hydrologyc, num_urbanc, filter_urbanc, &
            soilhydrology_vars, soilstate_vars, dtime)
+      call urbanxx_surfaceRunoff(num_urbanl, num_urbanc, filter_urbanc, &
+           soilhydrology_vars, soilstate_vars, dtime)
+      call urbanxx_surfaceRunoff_check(num_urbanl, num_urbanc, filter_urbanc)
 
       !------------------------------------------------------------------------------------
       if (use_pflotran .and. pf_hmode) then
