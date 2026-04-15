@@ -189,6 +189,7 @@ module elm_driver
   use UrbanxxNetShortwaveMod      , only : urbanxx_netShortwave
   use UrbanxxNetLongwaveMod       , only : urbanxx_netLongwave
   use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
+  use UrbanxxSoilFluxesMod        , only : urbanxx_soilFluxes, urbanxx_soilFluxes_check
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -909,6 +910,14 @@ contains
             atm2lnd_vars, solarabs_vars, canopystate_vars, &
             energyflux_vars )
        call t_stopf('bgp2')
+
+       call urbanxx_soilFluxes( &
+            filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
+            filter(nc)%num_nolakec, filter(nc)%nolakec,    &
+            filter(nc)%num_nolakep, filter(nc)%nolakep)
+       call urbanxx_soilFluxes_check( &
+            filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
+            filter(nc)%num_nolakep, filter(nc)%nolakep)
 
        ! ============================================================================
        ! Perform averaging from patch level to column level
