@@ -19,8 +19,6 @@ module UrbanxxSoilTemperatureMod
 
   ! Persistent input buffers (allocated once in init)
   real(c_double) , allocatable, target :: buildingTemp(:)
-  real(c_double) , allocatable, target :: h2oLiq(:)
-  real(c_double) , allocatable, target :: h2oIce(:)
   real(c_double) , allocatable, target :: h2oVol(:)
 
   ! Persistent output buffers for layer temperatures (allocated once in init)
@@ -55,8 +53,6 @@ contains
 
     ! Input buffers
     allocate(buildingTemp(num_urbanl))
-    allocate(h2oLiq(totalSize))
-    allocate(h2oIce(totalSize))
     allocate(h2oVol(totalSize))
 
     ! Output buffers — 2D flattened
@@ -101,8 +97,6 @@ contains
     associate(                          &
         t_building => lun_es%t_building , & ! Input: [real(r8) (:)   ]  internal building temperature (K)
         nlev2bed   => col_pp%nlevbed    , & ! Input: [integer  (:)   ]  number of layers to bedrock
-        h2osoi_liq => col_ws%h2osoi_liq , & ! Input: [real(r8) (:,:)]  liquid water (kg/m2)
-        h2osoi_ice => col_ws%h2osoi_ice , & ! Input: [real(r8) (:,:)]  ice lens (kg/m2)
         h2osoi_vol => col_ws%h2osoi_vol   & ! Input: [real(r8) (:,:)]  volumetric soil water [m3/m3]
         )
 
@@ -134,12 +128,8 @@ contains
               idx = idx + 1
               nlevbed = nlev2bed(c)
               if (j <= nlevbed) then
-                h2oLiq(idx) = h2osoi_liq(c, j)
-                h2oIce(idx) = h2osoi_ice(c, j)
                 h2oVol(idx) = h2osoi_vol(c, j)
               else
-                h2oLiq(idx) = 0.0_r8
-                h2oIce(idx) = 0.0_r8
                 h2oVol(idx) = 0.0_r8
               end if
             end if
@@ -155,24 +145,14 @@ contains
             do j = 1, nlevgrnd
               idx = idx + 1
               if (j <= nlevbed) then
-                h2oLiq(idx) = h2osoi_liq(c, j)
-                h2oIce(idx) = h2osoi_ice(c, j)
                 h2oVol(idx) = h2osoi_vol(c, j)
               else
-                h2oLiq(idx) = 0.0_r8
-                h2oIce(idx) = 0.0_r8
                 h2oVol(idx) = 0.0_r8
               end if
             end do
           end if
         end do
       end if
-
-      call UrbanSetSoilLiquidWaterForPerviousRoad(urbanxx, c_loc(h2oLiq), size2D_soil, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetSoilIceContentForPerviousRoad(urbanxx, c_loc(h2oIce), size2D_soil, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)

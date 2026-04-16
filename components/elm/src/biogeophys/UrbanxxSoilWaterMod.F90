@@ -21,8 +21,6 @@ module UrbanxxSoilWaterMod
   ! Persistent input buffers (allocated once in init)
   real(c_double) , allocatable, target :: zwt(:)
   real(c_double) , allocatable, target :: qflxTran(:)
-  real(c_double) , allocatable, target :: h2oLiq(:)
-  real(c_double) , allocatable, target :: h2oIce(:)
   real(c_double) , allocatable, target :: h2oVol(:)
 
   ! Persistent output buffers (allocated once in init)
@@ -58,8 +56,6 @@ contains
     allocate(zwt(num_urbanl))
 
     ! Input buffers — 2D flattened
-    allocate(h2oLiq(totalSize))
-    allocate(h2oIce(totalSize))
     allocate(h2oVol(totalSize))
     allocate(qflxTran(totalSize))
 
@@ -105,9 +101,7 @@ contains
     associate(                             &
          qflx_rootsoi => col_wf%qflx_rootsoi , & ! Input: [real(r8) (:,:)] vegetation/soil water exchange (mm H2O/s) (+ = to atm)
          nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
-         h2osoi_ice   => col_ws%h2osoi_ice   , & ! Input: [real(r8) (:,:)] ice lens (kg/m2)
          h2osoi_vol   => col_ws%h2osoi_vol   , & ! Input: [real(r8) (:,:)] volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
-         h2osoi_liq   => col_ws%h2osoi_liq   , & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
          zwt_col      => soilhydrology_vars%zwt_col & ! Input: [real(r8) (:)] water table depth (m)
          )
 
@@ -147,13 +141,9 @@ contains
               idx = idx + 1
               nlevbed = nlev2bed(c)
               if (j <= nlevbed) then
-                h2oLiq(idx) = h2osoi_liq(c, j)
-                h2oIce(idx) = h2osoi_ice(c, j)
                 h2oVol(idx) = h2osoi_vol(c, j)
                 qflxTran(idx) = qflx_rootsoi(c, j)
               else
-                h2oLiq(idx) = 0.0_r8
-                h2oIce(idx) = 0.0_r8
                 h2oVol(idx) = 0.0_r8
                 qflxTran(idx) = 0.0_r8
               end if
@@ -171,13 +161,9 @@ contains
             do j = 1, nlevgrnd
               idx = idx + 1
               if (j <= nlevbed) then
-                h2oLiq(idx) = h2osoi_liq(c, j)
-                h2oIce(idx) = h2osoi_ice(c, j)
                 h2oVol(idx) = h2osoi_vol(c, j)
                 qflxTran(idx) = qflx_rootsoi(c, j)
               else
-                h2oLiq(idx) = 0.0_r8
-                h2oIce(idx) = 0.0_r8
                 h2oVol(idx) = 0.0_r8
                 qflxTran(idx) = 0.0_r8
               end if
@@ -185,12 +171,6 @@ contains
           end if
         end do
       end if
-
-      call UrbanSetSoilLiquidWaterForPerviousRoad(urbanxx, c_loc(h2oLiq), size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetSoilIceContentForPerviousRoad(urbanxx, c_loc(h2oIce), size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)

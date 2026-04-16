@@ -47,8 +47,6 @@ module UrbanxxWaterTableMod
   real(c_double), allocatable, target :: dew_grnd_roof_in(:)
   real(c_double), allocatable, target :: dew_snow_roof_in(:)
   real(c_double), allocatable, target :: sub_snow_roof_in(:)
-  real(c_double), allocatable, target :: top_liq_roof_in(:)
-  real(c_double), allocatable, target :: top_ice_roof_in(:)
 
   real(c_double), allocatable, target :: dew_grnd_imperv_in(:)
   real(c_double), allocatable, target :: dew_snow_imperv_in(:)
@@ -112,8 +110,6 @@ contains
     allocate(dew_grnd_roof_in(num_urbanl))
     allocate(dew_snow_roof_in(num_urbanl))
     allocate(sub_snow_roof_in(num_urbanl))
-    allocate(top_liq_roof_in(num_urbanl))
-    allocate(top_ice_roof_in(num_urbanl))
 
     allocate(dew_grnd_imperv_in(num_urbanl))
     allocate(dew_snow_imperv_in(num_urbanl))
@@ -551,8 +547,6 @@ contains
         c = filter_urbanc(fc)
         if (col_pp%itype(c) == icol_roof) then
           l_roof = l_roof + 1
-          top_liq_roof_in(l_roof)   = h2osoi_liq(c,1)
-          top_ice_roof_in(l_roof)   = h2osoi_ice(c,1)
           dew_grnd_roof_in(l_roof)  = qflx_dew_grnd(c)
           dew_snow_roof_in(l_roof)  = qflx_dew_snow(c)
           sub_snow_roof_in(l_roof)  = qflx_sub_snow(c)
@@ -569,14 +563,6 @@ contains
       ! --------------------------------------------------------
       ! Set roof inputs
       ! --------------------------------------------------------
-      call UrbanSetTopH2OSoiLiqRoof(urbanxx, c_loc(top_liq_roof_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetTopH2OSoiIceRoof(urbanxx, c_loc(top_ice_roof_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
       call UrbanSetQflxDewGrndRoof(urbanxx, c_loc(dew_grnd_roof_in), &
            num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
