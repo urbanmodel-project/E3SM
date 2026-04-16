@@ -1190,6 +1190,7 @@ contains
     use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing_init
     use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff_init
     use UrbanxxInfiltrationMod   , only : urbanxx_infiltration_init
+    use UrbanxxWaterTableMod     , only : urbanxx_waterTable_init
 
     implicit none
 
@@ -1265,6 +1266,7 @@ contains
       call urbanxx_SetAtmosphericForcing_init(filter_inactive_and_active(nc)%num_urbanl)
       call urbanxx_surfaceRunoff_init(filter_inactive_and_active(nc)%num_urbanl)
       call urbanxx_infiltration_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_waterTable_init(filter_inactive_and_active(nc)%num_urbanl)
     end do
 
     call t_stopf('elm_init3')
