@@ -78,7 +78,8 @@ contains
     use SoilWaterMovementMod     , only : SoilWater
     use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff, urbanxx_surfaceRunoff_check
     use UrbanxxInfiltrationMod   , only : urbanxx_infiltration, urbanxx_infiltration_check
-    use UrbanxxWaterTableMod     , only : urbanxx_waterTable, urbanxx_waterTable_check
+    use UrbanxxWaterTableMod     , only : urbanxx_waterTable, urbanxx_waterTable_check, &
+                                          urbanxx_dewCondensation, urbanxx_dewCondensation_check
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use elm_varctl           , only : use_vsfm
     use SoilHydrologyMod     , only : DrainageVSFM
@@ -294,6 +295,8 @@ contains
       ! URBANxx WaterTable runs first (before ELM modifies wa_col / h2osoi)
       call urbanxx_waterTable(num_urbanl, num_urbanc, filter_urbanc, &
            soilhydrology_vars, dtime)
+      call urbanxx_dewCondensation(num_urbanl, num_urbanc, filter_urbanc, &
+           soilhydrology_vars, dtime)
 
       if (use_pflotran .and. pf_hmode) then
 
@@ -312,6 +315,8 @@ contains
       !------------------------------------------------------------------------------------
 
       call urbanxx_waterTable_check(num_urbanl, num_urbanc, filter_urbanc, &
+           soilhydrology_vars)
+      call urbanxx_dewCondensation_check(num_urbanl, num_urbanc, filter_urbanc, &
            soilhydrology_vars)
 
 

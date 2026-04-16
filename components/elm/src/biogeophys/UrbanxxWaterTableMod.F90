@@ -40,9 +40,36 @@ module UrbanxxWaterTableMod
   real(c_double), allocatable, target, public :: out_h2osoi_liq(:)
   real(c_double), allocatable, target, public :: out_h2osoi_ice(:)
 
+  ! -----------------------------------------------------------------------
+  ! Dew condensation buffers (roof and impervious road)
+  ! -----------------------------------------------------------------------
+  ! Input buffers
+  real(c_double), allocatable, target :: dew_grnd_roof_in(:)
+  real(c_double), allocatable, target :: dew_snow_roof_in(:)
+  real(c_double), allocatable, target :: sub_snow_roof_in(:)
+  real(c_double), allocatable, target :: top_liq_roof_in(:)
+  real(c_double), allocatable, target :: top_ice_roof_in(:)
+
+  real(c_double), allocatable, target :: dew_grnd_imperv_in(:)
+  real(c_double), allocatable, target :: dew_snow_imperv_in(:)
+  real(c_double), allocatable, target :: sub_snow_imperv_in(:)
+  real(c_double), allocatable, target :: top_liq_imperv_in(:)
+  real(c_double), allocatable, target :: top_ice_imperv_in(:)
+
+  ! Output buffers
+  real(c_double), allocatable, target, public :: out_top_liq_roof(:)
+  real(c_double), allocatable, target, public :: out_top_ice_roof(:)
+  real(c_double), allocatable, target, public :: out_qflx_sub_snow_roof(:)
+
+  real(c_double), allocatable, target, public :: out_top_liq_imperv(:)
+  real(c_double), allocatable, target, public :: out_top_ice_imperv(:)
+  real(c_double), allocatable, target, public :: out_qflx_sub_snow_imperv(:)
+
   public :: urbanxx_waterTable_init
   public :: urbanxx_waterTable
   public :: urbanxx_waterTable_check
+  public :: urbanxx_dewCondensation
+  public :: urbanxx_dewCondensation_check
 
 contains
 
@@ -80,6 +107,28 @@ contains
     ! Output buffers — 2D flattened
     allocate(out_h2osoi_liq(totalSize))
     allocate(out_h2osoi_ice(totalSize))
+
+    ! Dew condensation input buffers (1D)
+    allocate(dew_grnd_roof_in(num_urbanl))
+    allocate(dew_snow_roof_in(num_urbanl))
+    allocate(sub_snow_roof_in(num_urbanl))
+    allocate(top_liq_roof_in(num_urbanl))
+    allocate(top_ice_roof_in(num_urbanl))
+
+    allocate(dew_grnd_imperv_in(num_urbanl))
+    allocate(dew_snow_imperv_in(num_urbanl))
+    allocate(sub_snow_imperv_in(num_urbanl))
+    allocate(top_liq_imperv_in(num_urbanl))
+    allocate(top_ice_imperv_in(num_urbanl))
+
+    ! Dew condensation output buffers (1D)
+    allocate(out_top_liq_roof(num_urbanl))
+    allocate(out_top_ice_roof(num_urbanl))
+    allocate(out_qflx_sub_snow_roof(num_urbanl))
+
+    allocate(out_top_liq_imperv(num_urbanl))
+    allocate(out_top_ice_imperv(num_urbanl))
+    allocate(out_qflx_sub_snow_imperv(num_urbanl))
 
   end subroutine urbanxx_waterTable_init
 
@@ -456,5 +505,258 @@ contains
     end associate
 
   end subroutine urbanxx_waterTable_check
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_dewCondensation(num_urbanl, num_urbanc, filter_urbanc, &
+                                     soilhydrology_vars, dtime)
+    !
+    ! !DESCRIPTION:
+    ! Set dew/sublimation inputs for roof and impervious road columns,
+    ! call UrbanComputeDewCondensationRoofImperviousRoad, and retrieve outputs.
+    ! ELM reference: SoilHydrologyMod.F90:1062-1078
+    !
+    use ColumnType           , only : col_pp
+    use column_varcon        , only : icol_roof, icol_road_imperv
+    use SoilHydrologyType    , only : soilhydrology_type
+    use abortutils           , only : endrun
+    use shr_log_mod          , only : errmsg => shr_log_errmsg
+    !
+    implicit none
+    !
+    ! !ARGUMENTS:
+    integer(c_int), intent(in) :: num_urbanl
+    integer(c_int), intent(in) :: num_urbanc
+    integer       , intent(in) :: filter_urbanc(:)
+    type(soilhydrology_type), intent(inout) :: soilhydrology_vars
+    real(r8)      , intent(in) :: dtime
+    !
+    ! !LOCAL VARIABLES:
+    integer(c_int) :: status
+    integer        :: fc, c, l_roof, l_imperv
+
+    associate(                                                            &
+         h2osoi_liq    => col_ws%h2osoi_liq                           , & ! In:  liquid [kg/m2]
+         h2osoi_ice    => col_ws%h2osoi_ice                           , & ! In:  ice    [kg/m2]
+         qflx_dew_grnd => col_wf%qflx_dew_grnd                       , & ! In:  ground dew flux [mm/s]
+         qflx_dew_snow => col_wf%qflx_dew_snow                       , & ! In:  dew to snow [mm/s]
+         qflx_sub_snow => col_wf%qflx_sub_snow                         & ! In:  sublimation from ice [mm/s]
+         )
+
+      ! --------------------------------------------------------
+      ! Pack 1D input buffers for roof and impervious road columns
+      ! --------------------------------------------------------
+      l_roof   = 0
+      l_imperv = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_roof) then
+          l_roof = l_roof + 1
+          top_liq_roof_in(l_roof)   = h2osoi_liq(c,1)
+          top_ice_roof_in(l_roof)   = h2osoi_ice(c,1)
+          dew_grnd_roof_in(l_roof)  = qflx_dew_grnd(c)
+          dew_snow_roof_in(l_roof)  = qflx_dew_snow(c)
+          sub_snow_roof_in(l_roof)  = qflx_sub_snow(c)
+        else if (col_pp%itype(c) == icol_road_imperv) then
+          l_imperv = l_imperv + 1
+          top_liq_imperv_in(l_imperv)  = h2osoi_liq(c,1)
+          top_ice_imperv_in(l_imperv)  = h2osoi_ice(c,1)
+          dew_grnd_imperv_in(l_imperv) = qflx_dew_grnd(c)
+          dew_snow_imperv_in(l_imperv) = qflx_dew_snow(c)
+          sub_snow_imperv_in(l_imperv) = qflx_sub_snow(c)
+        end if
+      end do
+
+      ! --------------------------------------------------------
+      ! Set roof inputs
+      ! --------------------------------------------------------
+      call UrbanSetTopH2OSoiLiqRoof(urbanxx, c_loc(top_liq_roof_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetTopH2OSoiIceRoof(urbanxx, c_loc(top_ice_roof_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxDewGrndRoof(urbanxx, c_loc(dew_grnd_roof_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxDewSnowRoof(urbanxx, c_loc(dew_snow_roof_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxSubSnowRoof(urbanxx, c_loc(sub_snow_roof_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! --------------------------------------------------------
+      ! Set impervious road inputs
+      ! --------------------------------------------------------
+      call UrbanSetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(top_liq_imperv_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(top_ice_imperv_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxDewGrndImperviousRoad(urbanxx, c_loc(dew_grnd_imperv_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxDewSnowImperviousRoad(urbanxx, c_loc(dew_snow_imperv_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanSetQflxSubSnowImperviousRoad(urbanxx, c_loc(sub_snow_imperv_in), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! --------------------------------------------------------
+      ! Compute
+      ! --------------------------------------------------------
+      call UrbanComputeDewCondensationRoofImperviousRoad(urbanxx, dtime, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      ! --------------------------------------------------------
+      ! Retrieve outputs
+      ! --------------------------------------------------------
+      call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(out_top_liq_roof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanGetTopH2OSoiIceRoof(urbanxx, c_loc(out_top_ice_roof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanGetQflxSubSnowRoof(urbanxx, c_loc(out_qflx_sub_snow_roof), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(out_top_liq_imperv), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanGetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(out_top_ice_imperv), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+      call UrbanGetQflxSubSnowImperviousRoad(urbanxx, c_loc(out_qflx_sub_snow_imperv), &
+           num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    end associate
+
+    ! No output values are written back into ELM data structures.
+
+  end subroutine urbanxx_dewCondensation
+
+  !-----------------------------------------------------------------------
+  subroutine urbanxx_dewCondensation_check(num_urbanl, num_urbanc, &
+                                           filter_urbanc, soilhydrology_vars)
+    !
+    ! !DESCRIPTION:
+    ! Compare URBANxx dew condensation outputs against ELM values for
+    ! roof and impervious road columns. Calls endrun on any mismatch.
+    !
+    use ColumnType   , only : col_pp
+    use column_varcon, only : icol_roof, icol_road_imperv
+    use abortutils   , only : endrun
+    use shr_log_mod  , only : errmsg => shr_log_errmsg
+    use SoilHydrologyType , only : soilhydrology_type
+    !
+    implicit none
+    !
+    ! !ARGUMENTS:
+    integer(c_int)          , intent(in) :: num_urbanl
+    integer(c_int)          , intent(in) :: num_urbanc
+    integer                 , intent(in) :: filter_urbanc(:)
+    type(soilhydrology_type), intent(in) :: soilhydrology_vars
+    !
+    ! !LOCAL VARIABLES:
+    integer  :: fc, c, l_roof, l_imperv
+    real(r8) :: max_abs_err, max_rel_err, abs_err
+    real(r8), parameter :: tol = 1.0e-6_r8
+
+    associate( &
+         h2osoi_liq => col_ws%h2osoi_liq , &
+         h2osoi_ice => col_ws%h2osoi_ice   &
+         )
+
+      ! --- h2osoi_liq (roof) ---
+      max_abs_err = 0._r8
+      max_rel_err = 0._r8
+      l_roof = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_roof) then
+          l_roof = l_roof + 1
+          abs_err = abs(h2osoi_liq(c,1) - out_top_liq_roof(l_roof))
+          max_abs_err = max(max_abs_err, abs_err)
+          max_rel_err = max(max_rel_err, &
+               abs_err / max(abs(h2osoi_liq(c,1)), 1.0e-20_r8))
+        end if
+      end do
+      write(iulog,*) 'Max error in h2osoi_liq (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
+      if (max_abs_err > tol) call endrun( &
+           msg='urbanxx_dewCondensation_check: h2osoi_liq roof error too large'//errmsg(__FILE__,__LINE__))
+
+      ! --- h2osoi_ice (roof) ---
+      max_abs_err = 0._r8
+      max_rel_err = 0._r8
+      l_roof = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_roof) then
+          l_roof = l_roof + 1
+          abs_err = abs(h2osoi_ice(c,1) - out_top_ice_roof(l_roof))
+          max_abs_err = max(max_abs_err, abs_err)
+          max_rel_err = max(max_rel_err, &
+               abs_err / max(abs(h2osoi_ice(c,1)), 1.0e-20_r8))
+        end if
+      end do
+      write(iulog,*) 'Max error in h2osoi_ice (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
+      if (max_abs_err > tol) call endrun( &
+           msg='urbanxx_dewCondensation_check: h2osoi_ice roof error too large'//errmsg(__FILE__,__LINE__))
+
+      ! --- h2osoi_liq (impervious road) ---
+      max_abs_err = 0._r8
+      max_rel_err = 0._r8
+      l_imperv = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_road_imperv) then
+          l_imperv = l_imperv + 1
+          abs_err = abs(h2osoi_liq(c,1) - out_top_liq_imperv(l_imperv))
+          max_abs_err = max(max_abs_err, abs_err)
+          max_rel_err = max(max_rel_err, &
+               abs_err / max(abs(h2osoi_liq(c,1)), 1.0e-20_r8))
+        end if
+      end do
+      write(iulog,*) 'Max error in h2osoi_liq (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
+      if (max_abs_err > tol) call endrun( &
+           msg='urbanxx_dewCondensation_check: h2osoi_liq imperv road error too large'//errmsg(__FILE__,__LINE__))
+
+      ! --- h2osoi_ice (impervious road) ---
+      max_abs_err = 0._r8
+      max_rel_err = 0._r8
+      l_imperv = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_road_imperv) then
+          l_imperv = l_imperv + 1
+          abs_err = abs(h2osoi_ice(c,1) - out_top_ice_imperv(l_imperv))
+          max_abs_err = max(max_abs_err, abs_err)
+          max_rel_err = max(max_rel_err, &
+               abs_err / max(abs(h2osoi_ice(c,1)), 1.0e-20_r8))
+        end if
+      end do
+      write(iulog,*) 'Max error in h2osoi_ice (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
+      if (max_abs_err > tol) call endrun( &
+           msg='urbanxx_dewCondensation_check: h2osoi_ice imperv road error too large'//errmsg(__FILE__,__LINE__))
+
+    end associate
+
+  end subroutine urbanxx_dewCondensation_check
 
 end module UrbanxxWaterTableMod
