@@ -19,7 +19,6 @@ module UrbanxxSoilTemperatureMod
 
   ! Persistent input buffers (allocated once in init)
   real(c_double) , allocatable, target :: buildingTemp(:)
-  real(c_double) , allocatable, target :: h2oVol(:)
 
   ! Persistent output buffers for layer temperatures (allocated once in init)
   ! Roof, sunlit wall, shaded wall: (num_urbanl * nlevurb) — 1D flat arrays
@@ -53,7 +52,6 @@ contains
 
     ! Input buffers
     allocate(buildingTemp(num_urbanl))
-    allocate(h2oVol(totalSize))
 
     ! Output buffers — 2D flattened
     allocate(layertemp_roof(num_urbanl * nlevurb))
@@ -74,8 +72,6 @@ contains
     use ColumnType     , only : col_pp
     use column_varcon  , only : icol_road_perv
     use elm_varpar     , only : nlevgrnd, nlevurb
-    use ColumnDataType , only : col_ws
-    use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
     !
     implicit none
     !
@@ -89,15 +85,12 @@ contains
     ! !LOCAL VARIABLES:
     integer(c_int)                       :: status
     integer                              :: fc, c, j, fl, l
-    integer                              :: idx, idx_perv, nlevbed
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
-    logical(c_bool)                      :: isLayoutLeft
 
     ! Set building temperature before heat diffusion
     associate(                          &
         t_building => lun_es%t_building , & ! Input: [real(r8) (:)   ]  internal building temperature (K)
-        nlev2bed   => col_pp%nlevbed    , & ! Input: [integer  (:)   ]  number of layers to bedrock
-        h2osoi_vol => col_ws%h2osoi_vol   & ! Input: [real(r8) (:,:)]  volumetric soil water [m3/m3]
+        nlev2bed   => col_pp%nlevbed      & ! Input: [integer  (:)   ]  number of layers to bedrock
         )
 
       do fl = 1, num_urbanl
@@ -107,54 +100,6 @@ contains
 
       call UrbanSetBuildingTemperature(urbanxx, c_loc(buildingTemp), &
            num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! Set soil water content for pervious road so heat diffusion uses
-      ! up-to-date water state (thermal conductivity depends on water content)
-      size2D_soil(1) = num_urbanl
-      size2D_soil(2) = nlevgrnd
-
-      isLayoutLeft = UrbanKokkosIsLayoutLeft()
-
-      if (isLayoutLeft) then
-        ! LayoutLeft: First dimension (landunits) varies fastest
-        idx = 0
-        do j = 1, nlevgrnd
-          idx_perv = 0
-          do fc = 1, num_urbanc
-            c = filter_urbanc(fc)
-            if (col_pp%itype(c) == icol_road_perv) then
-              idx_perv = idx_perv + 1
-              idx = idx + 1
-              nlevbed = nlev2bed(c)
-              if (j <= nlevbed) then
-                h2oVol(idx) = h2osoi_vol(c, j)
-              else
-                h2oVol(idx) = 0.0_r8
-              end if
-            end if
-          end do
-        end do
-      else
-        ! LayoutRight: Last dimension (layers) varies fastest
-        idx = 0
-        do fc = 1, num_urbanc
-          c = filter_urbanc(fc)
-          if (col_pp%itype(c) == icol_road_perv) then
-            nlevbed = nlev2bed(c)
-            do j = 1, nlevgrnd
-              idx = idx + 1
-              if (j <= nlevbed) then
-                h2oVol(idx) = h2osoi_vol(c, j)
-              else
-                h2oVol(idx) = 0.0_r8
-              end if
-            end do
-          end if
-        end do
-      end if
-
-      call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeHeatDiffusion(urbanxx, status)

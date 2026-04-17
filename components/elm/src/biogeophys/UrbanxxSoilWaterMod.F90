@@ -21,7 +21,6 @@ module UrbanxxSoilWaterMod
   ! Persistent input buffers (allocated once in init)
   real(c_double) , allocatable, target :: zwt(:)
   real(c_double) , allocatable, target :: qflxTran(:)
-  real(c_double) , allocatable, target :: h2oVol(:)
 
   ! Persistent output buffers (allocated once in init)
   ! 2D: (num_urbanl * nlevgrnd) flattened
@@ -56,7 +55,6 @@ contains
     allocate(zwt(num_urbanl))
 
     ! Input buffers — 2D flattened
-    allocate(h2oVol(totalSize))
     allocate(qflxTran(totalSize))
 
     ! Output buffers — 2D flattened
@@ -101,7 +99,6 @@ contains
     associate(                             &
          qflx_rootsoi => col_wf%qflx_rootsoi , & ! Input: [real(r8) (:,:)] vegetation/soil water exchange (mm H2O/s) (+ = to atm)
          nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
-         h2osoi_vol   => col_ws%h2osoi_vol   , & ! Input: [real(r8) (:,:)] volumetric soil water (0<=h2osoi_vol<=watsat) [m3/m3]
          zwt_col      => soilhydrology_vars%zwt_col & ! Input: [real(r8) (:)] water table depth (m)
          )
 
@@ -141,10 +138,8 @@ contains
               idx = idx + 1
               nlevbed = nlev2bed(c)
               if (j <= nlevbed) then
-                h2oVol(idx) = h2osoi_vol(c, j)
                 qflxTran(idx) = qflx_rootsoi(c, j)
               else
-                h2oVol(idx) = 0.0_r8
                 qflxTran(idx) = 0.0_r8
               end if
             end if
@@ -161,19 +156,14 @@ contains
             do j = 1, nlevgrnd
               idx = idx + 1
               if (j <= nlevbed) then
-                h2oVol(idx) = h2osoi_vol(c, j)
                 qflxTran(idx) = qflx_rootsoi(c, j)
               else
-                h2oVol(idx) = 0.0_r8
                 qflxTran(idx) = 0.0_r8
               end if
             end do
           end if
         end do
       end if
-
-      call UrbanSetSoilVolumetricWaterForPerviousRoad(urbanxx, c_loc(h2oVol), size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanSetTranspirationFluxForPerviousRoad(urbanxx, c_loc(qflxTran), size2D, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
