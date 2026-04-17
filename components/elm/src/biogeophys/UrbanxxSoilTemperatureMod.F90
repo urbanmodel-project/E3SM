@@ -10,7 +10,6 @@ module UrbanxxSoilTemperatureMod
   use shr_kind_mod         , only : r8 => shr_kind_r8
   use spmdMod              , only : masterproc, iam
   use elm_varctl           , only : iulog
-  use LandunitDataType     , only : lun_es
   use UrbanxxInstanceMod   , only : urbanxx
 
   implicit none
@@ -18,8 +17,6 @@ module UrbanxxSoilTemperatureMod
   private
 
   ! Persistent input buffers (allocated once in init)
-  real(c_double) , allocatable, target :: buildingTemp(:)
-
   ! Persistent output buffers for layer temperatures (allocated once in init)
   ! Roof, sunlit wall, shaded wall: (num_urbanl * nlevurb) — 1D flat arrays
   ! Impervious road, pervious road: (num_urbanl * nlevgrnd) — 1D flat arrays
@@ -49,9 +46,6 @@ contains
     integer(c_int) :: totalSize
 
     totalSize = num_urbanl * nlevgrnd
-
-    ! Input buffers
-    allocate(buildingTemp(num_urbanl))
 
     ! Output buffers — 2D flattened
     allocate(layertemp_roof(num_urbanl * nlevurb))
@@ -87,20 +81,9 @@ contains
     integer                              :: fc, c, j, fl, l
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
 
-    ! Set building temperature before heat diffusion
-    associate(                          &
-        t_building => lun_es%t_building , & ! Input: [real(r8) (:)   ]  internal building temperature (K)
-        nlev2bed   => col_pp%nlevbed      & ! Input: [integer  (:)   ]  number of layers to bedrock
+    associate(                        &
+        nlev2bed => col_pp%nlevbed    & ! Input: [integer  (:)   ]  number of layers to bedrock
         )
-
-      do fl = 1, num_urbanl
-         l = filter_urbanl(fl)
-         buildingTemp(fl) = t_building(l)
-      end do
-
-      call UrbanSetBuildingTemperature(urbanxx, c_loc(buildingTemp), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeHeatDiffusion(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
