@@ -23,10 +23,6 @@ module UrbanxxWaterTableMod
 
   ! Persistent input buffers (allocated once in init)
   real(c_double), allocatable, target :: wa_in(:)
-  real(c_double), allocatable, target :: frac_h2osfc_in(:)
-  real(c_double), allocatable, target :: dew_grnd_in(:)
-  real(c_double), allocatable, target :: dew_snow_in(:)
-  real(c_double), allocatable, target :: sub_snow_in(:)
   real(c_double), allocatable, target :: qcharge_in(:)
 
   ! Persistent output buffers (allocated once in init)
@@ -86,10 +82,6 @@ contains
 
     ! Input buffers — 1D
     allocate(wa_in(num_urbanl))
-    allocate(frac_h2osfc_in(num_urbanl))
-    allocate(dew_grnd_in(num_urbanl))
-    allocate(dew_snow_in(num_urbanl))
-    allocate(sub_snow_in(num_urbanl))
     allocate(qcharge_in(num_urbanl))
 
     ! Output buffers — 1D
@@ -158,10 +150,6 @@ contains
     associate(                                                               &
          h2osoi_liq     => col_ws%h2osoi_liq                              , & ! Output: liquid water [kg/m2]
          h2osoi_ice     => col_ws%h2osoi_ice                              , & ! Output: ice lens [kg/m2]
-         frac_h2osfc    => col_ws%frac_h2osfc                             , & ! Input:  fraction surface covered by ponded water [-]
-         qflx_dew_grnd  => col_wf%qflx_dew_grnd                          , & ! Input:  ground dew flux [mm H2O/s]
-         qflx_dew_snow  => col_wf%qflx_dew_snow                          , & ! Input:  dew added to snow [mm H2O/s]
-         qflx_sub_snow  => col_wf%qflx_sub_snow                          , & ! In/Out: sublimation from ice [mm H2O/s]
          qflx_drain     => col_wf%qflx_drain                             , & ! Output: sub-surface drainage [mm H2O/s]
          qflx_rsub_sat  => col_wf%qflx_rsub_sat                          , & ! Output: saturation excess runoff [mm H2O/s]
          zwt_col        => soilhydrology_vars%zwt_col                     , & ! In/Out: water table depth [m]
@@ -180,32 +168,12 @@ contains
         if (col_pp%itype(c) == icol_road_perv) then
           idx_perv = idx_perv + 1
           wa_in(idx_perv)         = wa_col(c)
-          frac_h2osfc_in(idx_perv) = frac_h2osfc(c)
-          dew_grnd_in(idx_perv)   = qflx_dew_grnd(c)
-          dew_snow_in(idx_perv)   = qflx_dew_snow(c)
-          sub_snow_in(idx_perv)   = qflx_sub_snow(c)
           qcharge_in(idx_perv)    = qcharge_col(c)
         end if
       end do
 
       ! Set 1D inputs
       call UrbanSetAquiferWaterForPerviousRoad(urbanxx, c_loc(wa_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetFracH2osfcForPerviousRoad(urbanxx, c_loc(frac_h2osfc_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetDewGrndFluxForPerviousRoad(urbanxx, c_loc(dew_grnd_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetDewSnowFluxForPerviousRoad(urbanxx, c_loc(dew_snow_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetSubSnowFluxForPerviousRoad(urbanxx, c_loc(sub_snow_in), &
            num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
