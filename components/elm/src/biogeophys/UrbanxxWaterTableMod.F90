@@ -39,15 +39,6 @@ module UrbanxxWaterTableMod
   ! -----------------------------------------------------------------------
   ! Dew condensation buffers (roof and impervious road)
   ! -----------------------------------------------------------------------
-  ! Input buffers
-  real(c_double), allocatable, target :: dew_grnd_roof_in(:)
-  real(c_double), allocatable, target :: dew_snow_roof_in(:)
-  real(c_double), allocatable, target :: sub_snow_roof_in(:)
-
-  real(c_double), allocatable, target :: dew_grnd_imperv_in(:)
-  real(c_double), allocatable, target :: dew_snow_imperv_in(:)
-  real(c_double), allocatable, target :: sub_snow_imperv_in(:)
-
   ! Output buffers
   real(c_double), allocatable, target, public :: out_top_liq_roof(:)
   real(c_double), allocatable, target, public :: out_top_ice_roof(:)
@@ -95,15 +86,6 @@ contains
     ! Output buffers — 2D flattened
     allocate(out_h2osoi_liq(totalSize))
     allocate(out_h2osoi_ice(totalSize))
-
-    ! Dew condensation input buffers (1D)
-    allocate(dew_grnd_roof_in(num_urbanl))
-    allocate(dew_snow_roof_in(num_urbanl))
-    allocate(sub_snow_roof_in(num_urbanl))
-
-    allocate(dew_grnd_imperv_in(num_urbanl))
-    allocate(dew_snow_imperv_in(num_urbanl))
-    allocate(sub_snow_imperv_in(num_urbanl))
 
     ! Dew condensation output buffers (1D)
     allocate(out_top_liq_roof(num_urbanl))
@@ -475,11 +457,7 @@ contains
     ! call UrbanComputeDewCondensationRoofImperviousRoad, and retrieve outputs.
     ! ELM reference: SoilHydrologyMod.F90:1062-1078
     !
-    use ColumnType           , only : col_pp
-    use column_varcon        , only : icol_roof, icol_road_imperv
     use SoilHydrologyType    , only : soilhydrology_type
-    use abortutils           , only : endrun
-    use shr_log_mod          , only : errmsg => shr_log_errmsg
     !
     implicit none
     !
@@ -492,98 +470,39 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer(c_int) :: status
-    integer        :: fc, c, l_roof, l_imperv
 
-    associate(                                                            &
-         qflx_dew_grnd => col_wf%qflx_dew_grnd                       , & ! In:  ground dew flux [mm/s]
-         qflx_dew_snow => col_wf%qflx_dew_snow                       , & ! In:  dew to snow [mm/s]
-         qflx_sub_snow => col_wf%qflx_sub_snow                         & ! In:  sublimation from ice [mm/s]
-         )
+    ! --------------------------------------------------------
+    ! Compute
+    ! --------------------------------------------------------
+    call UrbanComputeDewCondensationRoofImperviousRoad(urbanxx, dtime, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! --------------------------------------------------------
-      ! Pack 1D input buffers for roof and impervious road columns
-      ! --------------------------------------------------------
-      l_roof   = 0
-      l_imperv = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-        if (col_pp%itype(c) == icol_roof) then
-          l_roof = l_roof + 1
-          dew_grnd_roof_in(l_roof)  = qflx_dew_grnd(c)
-          dew_snow_roof_in(l_roof)  = qflx_dew_snow(c)
-          sub_snow_roof_in(l_roof)  = qflx_sub_snow(c)
-        else if (col_pp%itype(c) == icol_road_imperv) then
-          l_imperv = l_imperv + 1
-          dew_grnd_imperv_in(l_imperv) = qflx_dew_grnd(c)
-          dew_snow_imperv_in(l_imperv) = qflx_dew_snow(c)
-          sub_snow_imperv_in(l_imperv) = qflx_sub_snow(c)
-        end if
-      end do
+    ! --------------------------------------------------------
+    ! Retrieve outputs
+    ! --------------------------------------------------------
+    call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(out_top_liq_roof), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! --------------------------------------------------------
-      ! Set roof inputs
-      ! --------------------------------------------------------
-      call UrbanSetQflxDewGrndRoof(urbanxx, c_loc(dew_grnd_roof_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetTopH2OSoiIceRoof(urbanxx, c_loc(out_top_ice_roof), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetQflxDewSnowRoof(urbanxx, c_loc(dew_snow_roof_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetQflxSubSnowRoof(urbanxx, c_loc(out_qflx_sub_snow_roof), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetQflxSubSnowRoof(urbanxx, c_loc(sub_snow_roof_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(out_top_liq_imperv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! --------------------------------------------------------
-      ! Set impervious road inputs
-      ! --------------------------------------------------------
-      call UrbanSetQflxDewGrndImperviousRoad(urbanxx, c_loc(dew_grnd_imperv_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(out_top_ice_imperv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanSetQflxDewSnowImperviousRoad(urbanxx, c_loc(dew_snow_imperv_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetQflxSubSnowImperviousRoad(urbanxx, c_loc(sub_snow_imperv_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! --------------------------------------------------------
-      ! Compute
-      ! --------------------------------------------------------
-      call UrbanComputeDewCondensationRoofImperviousRoad(urbanxx, dtime, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! --------------------------------------------------------
-      ! Retrieve outputs
-      ! --------------------------------------------------------
-      call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(out_top_liq_roof), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetTopH2OSoiIceRoof(urbanxx, c_loc(out_top_ice_roof), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetQflxSubSnowRoof(urbanxx, c_loc(out_qflx_sub_snow_roof), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(out_top_liq_imperv), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(out_top_ice_imperv), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetQflxSubSnowImperviousRoad(urbanxx, c_loc(out_qflx_sub_snow_imperv), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    end associate
+    call UrbanGetQflxSubSnowImperviousRoad(urbanxx, c_loc(out_qflx_sub_snow_imperv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     ! No output values are written back into ELM data structures.
 
