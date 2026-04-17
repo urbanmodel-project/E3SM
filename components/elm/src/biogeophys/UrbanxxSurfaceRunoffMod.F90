@@ -19,12 +19,6 @@ module UrbanxxSurfaceRunoffMod
 
   private
 
-    ! Persistent input buffers (allocated once in init) — pervious road only
-  real(c_double) , allocatable, target :: wtfact_buf(:)
-  real(c_double) , allocatable, target :: fover_buf(:)
-  real(c_double) , allocatable, target :: frost_table_buf(:)
-  real(c_double) , allocatable, target :: zwt_perched_buf(:)
-
   ! Persistent output buffers (allocated once in init)
   real(c_double) , allocatable, target, public :: out_qflx_surf_roof(:)
   real(c_double) , allocatable, target, public :: out_qflx_surf_imperv(:)
@@ -49,12 +43,6 @@ contains
     !
     implicit none
     integer(c_int), intent(in) :: num_urbanl
-
-    ! Pervious road input buffers
-    allocate(wtfact_buf(num_urbanl))
-    allocate(fover_buf(num_urbanl))
-    allocate(frost_table_buf(num_urbanl))
-    allocate(zwt_perched_buf(num_urbanl))
 
     ! Output buffers
     allocate(out_qflx_surf_roof(num_urbanl))
@@ -97,44 +85,9 @@ contains
     integer        :: idx_roof, idx_imperv, idx_sunwall, idx_shadewall
 
     associate( &
-         wtfact_col      => soilstate_vars%wtfact_col            , & ! Input: [real(r8)(:)] max saturated fraction
-         fover           => soilhydrology_vars%fover             , & ! Input: [real(r8)(:)] decay factor (gridcell)
-         frost_table_col => soilhydrology_vars%frost_table_col   , & ! Input: [real(r8)(:)] frost table depth (m)
-         zwt_perched_col => soilhydrology_vars%zwt_perched_col   , & ! Input: [real(r8)(:)] perched water table depth (m)
          qflx_surf       => col_wf%qflx_surf                    , & ! Output: [real(r8)(:)] surface runoff (mm/s)
          h2osoi_liq      => col_ws%h2osoi_liq                     & ! Output: [real(r8)(:,:)] liquid water (kg/m2)
          )
-
-      ! Pack pervious road inputs
-      idx_perv = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-        if (col_pp%itype(c) == icol_road_perv) then
-          idx_perv = idx_perv + 1
-          g = col_pp%gridcell(c)
-          wtfact_buf(idx_perv)      = wtfact_col(c)
-          fover_buf(idx_perv)       = fover(g)
-          frost_table_buf(idx_perv) = frost_table_col(c)
-          zwt_perched_buf(idx_perv) = zwt_perched_col(c)
-        end if
-      end do
-
-      ! Set pervious road inputs
-      call UrbanSetWtfactPerviousRoad(urbanxx, c_loc(wtfact_buf), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetFoverPerviousRoad(urbanxx, c_loc(fover_buf), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetFrostTablePerviousRoad(urbanxx, c_loc(frost_table_buf), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetZwtPerchedPerviousRoad(urbanxx, c_loc(zwt_perched_buf), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! Note: TopH2OSoiLiq for roof/imperv road is already set by urbanxx_soilFluxes.
-      !       zwt is already set by urbanxx_soilWater.
-      !       ForcRain is already set by urbanxx_SetAtmosphericForcing.
 
       ! Compute surface runoff
       call UrbanComputeSurfaceRunoff(urbanxx, real(dtime, c_double), status)

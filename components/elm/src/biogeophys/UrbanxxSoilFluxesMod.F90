@@ -37,12 +37,6 @@ module UrbanxxSoilFluxesMod
   real(c_double) , allocatable, target :: qflx_dew_grnd_improad(:)
   real(c_double) , allocatable, target :: qflx_dew_grnd_perroad(:)
 
-  ! Input buffers: top-layer soil water for roof and impervious road
-  real(c_double) , allocatable, target :: top_h2osoi_liq_roof(:)
-  real(c_double) , allocatable, target :: top_h2osoi_ice_roof(:)
-  real(c_double) , allocatable, target :: top_h2osoi_liq_improad(:)
-  real(c_double) , allocatable, target :: top_h2osoi_ice_improad(:)
-
   public :: urbanxx_soilFluxes_init
   public :: urbanxx_soilFluxes
   public :: urbanxx_soilFluxes_check
@@ -80,12 +74,6 @@ contains
     allocate(qflx_dew_grnd_improad(num_urbanl))
     allocate(qflx_dew_grnd_perroad(num_urbanl))
 
-    ! Top-layer soil water inputs for roof and impervious road
-    allocate(top_h2osoi_liq_roof(num_urbanl))
-    allocate(top_h2osoi_ice_roof(num_urbanl))
-    allocate(top_h2osoi_liq_improad(num_urbanl))
-    allocate(top_h2osoi_ice_improad(num_urbanl))
-
   end subroutine urbanxx_soilFluxes_init
 
   !-----------------------------------------------------------------------
@@ -99,11 +87,6 @@ contains
     ! Results are written back into the corresponding ELM veg_ef / veg_wf
     ! fields for urban patches.
     !
-    use ColumnType     , only : col_pp
-    use ColumnDataType  , only : col_ws
-    use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv, &
-                                icol_sunwall, icol_shadewall
-    !
     implicit none
     !
     integer(c_int) , intent(in) :: num_urbanl
@@ -114,45 +97,6 @@ contains
     integer        , intent(in) :: filter_nolakep(:)  ! no-lake patch filter
     !
     integer(c_int)  :: status
-    integer :: fp, p, c, fc
-    integer :: idx_roof, idx_improad, idx_perroad, idx_sunwall, idx_shadwall
-    integer :: j  ! top active layer index (snl(c)+1)
-
-    ! --- Pack top-layer soil water for roof and impervious road ---
-    ! h2osoi_liq(c, snl(c)+1) and h2osoi_ice(c, snl(c)+1) correspond to
-    ! TopH2OSoiLiq and TopH2OSoiIce in URBANxx for roof and impervious road.
-    idx_roof    = 0
-    idx_improad = 0
-    do fc = 1, num_nolakec
-      c = filter_nolakec(fc)
-      j = col_pp%snl(c) + 1
-      if (col_pp%itype(c) == icol_roof) then
-        idx_roof = idx_roof + 1
-        top_h2osoi_liq_roof(idx_roof) = col_ws%h2osoi_liq(c, j)
-        top_h2osoi_ice_roof(idx_roof) = col_ws%h2osoi_ice(c, j)
-      else if (col_pp%itype(c) == icol_road_imperv) then
-        idx_improad = idx_improad + 1
-        top_h2osoi_liq_improad(idx_improad) = col_ws%h2osoi_liq(c, j)
-        top_h2osoi_ice_improad(idx_improad) = col_ws%h2osoi_ice(c, j)
-      end if
-    end do
-
-    ! --- Send top-layer soil water to URBANxx ---
-    call UrbanSetTopH2OSoiLiqRoof(urbanxx, c_loc(top_h2osoi_liq_roof), &
-         num_urbanl, status)
-    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    call UrbanSetTopH2OSoiIceRoof(urbanxx, c_loc(top_h2osoi_ice_roof), &
-         num_urbanl, status)
-    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    call UrbanSetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(top_h2osoi_liq_improad), &
-         num_urbanl, status)
-    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    call UrbanSetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(top_h2osoi_ice_improad), &
-         num_urbanl, status)
-    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     ! --- Run URBANxx soil fluxes ---
     call UrbanComputeSoilFluxes(urbanxx, status)

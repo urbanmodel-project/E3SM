@@ -51,8 +51,6 @@ module UrbanxxWaterTableMod
   real(c_double), allocatable, target :: dew_grnd_imperv_in(:)
   real(c_double), allocatable, target :: dew_snow_imperv_in(:)
   real(c_double), allocatable, target :: sub_snow_imperv_in(:)
-  real(c_double), allocatable, target :: top_liq_imperv_in(:)
-  real(c_double), allocatable, target :: top_ice_imperv_in(:)
 
   ! Output buffers
   real(c_double), allocatable, target, public :: out_top_liq_roof(:)
@@ -114,8 +112,6 @@ contains
     allocate(dew_grnd_imperv_in(num_urbanl))
     allocate(dew_snow_imperv_in(num_urbanl))
     allocate(sub_snow_imperv_in(num_urbanl))
-    allocate(top_liq_imperv_in(num_urbanl))
-    allocate(top_ice_imperv_in(num_urbanl))
 
     ! Dew condensation output buffers (1D)
     allocate(out_top_liq_roof(num_urbanl))
@@ -531,8 +527,6 @@ contains
     integer        :: fc, c, l_roof, l_imperv
 
     associate(                                                            &
-         h2osoi_liq    => col_ws%h2osoi_liq                           , & ! In:  liquid [kg/m2]
-         h2osoi_ice    => col_ws%h2osoi_ice                           , & ! In:  ice    [kg/m2]
          qflx_dew_grnd => col_wf%qflx_dew_grnd                       , & ! In:  ground dew flux [mm/s]
          qflx_dew_snow => col_wf%qflx_dew_snow                       , & ! In:  dew to snow [mm/s]
          qflx_sub_snow => col_wf%qflx_sub_snow                         & ! In:  sublimation from ice [mm/s]
@@ -552,8 +546,6 @@ contains
           sub_snow_roof_in(l_roof)  = qflx_sub_snow(c)
         else if (col_pp%itype(c) == icol_road_imperv) then
           l_imperv = l_imperv + 1
-          top_liq_imperv_in(l_imperv)  = h2osoi_liq(c,1)
-          top_ice_imperv_in(l_imperv)  = h2osoi_ice(c,1)
           dew_grnd_imperv_in(l_imperv) = qflx_dew_grnd(c)
           dew_snow_imperv_in(l_imperv) = qflx_dew_snow(c)
           sub_snow_imperv_in(l_imperv) = qflx_sub_snow(c)
@@ -578,14 +570,6 @@ contains
       ! --------------------------------------------------------
       ! Set impervious road inputs
       ! --------------------------------------------------------
-      call UrbanSetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(top_liq_imperv_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(top_ice_imperv_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
       call UrbanSetQflxDewGrndImperviousRoad(urbanxx, c_loc(dew_grnd_imperv_in), &
            num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
