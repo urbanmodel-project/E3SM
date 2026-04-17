@@ -1255,7 +1255,7 @@ contains
                   filter_inactive_and_active(nc)%num_urbanp, &
                   filter_inactive_and_active(nc)%urbanp,     &
                   urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
-                  soilstate_vars)
+                  soilstate_vars, soilhydrology_vars)
 
       ! Allocate persistent buffers for physics modules
       call urbanxx_netLongwave_init(filter_inactive_and_active(nc)%num_urbanl)

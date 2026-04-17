@@ -24,10 +24,6 @@ module UrbanxxDrainageMod
   ! Number of urban landunits (set at initialization, used by drainage routines)
   integer(c_int), save :: module_num_urbanl = 0
 
-  ! Persistent input buffers (allocated once in init)
-  real(c_double), allocatable, target :: hkdepth_in(:)
-  real(c_double), allocatable, target :: topo_slope_in(:)
-
   ! Persistent output buffers (allocated once in init)
   real(c_double), allocatable, target, public :: out_qflx_drain(:)
   real(c_double), allocatable, target, public :: out_qflx_rsub_sat(:)
@@ -55,10 +51,6 @@ contains
 
     module_num_urbanl = num_urbanl
 
-    ! Allocate input buffers
-    allocate(hkdepth_in(num_urbanl))
-    allocate(topo_slope_in(num_urbanl))
-
     ! Allocate output buffers
     allocate(out_qflx_drain(num_urbanl))
     allocate(out_qflx_rsub_sat(num_urbanl))
@@ -79,76 +71,35 @@ contains
   end subroutine urbanxx_drainage_init
 
   !-----------------------------------------------------------------------
-  subroutine urbanxx_drainage(num_urbanc, filter_urbanc, &
-                               soilhydrology_vars, dtime)
+  subroutine urbanxx_drainage(dtime)
     !
     ! !DESCRIPTION:
-    ! Set drainage inputs for pervious road columns, call
-    ! UrbanComputeDrainage, and unpack outputs into module buffers.
-    !
-    use ColumnType           , only : col_pp
-    use column_varcon        , only : icol_road_perv
-    use SoilHydrologyType    , only : soilhydrology_type
-    use abortutils           , only : endrun
-    use shr_log_mod          , only : errmsg => shr_log_errmsg
+    ! Call UrbanComputeDrainage and unpack outputs into module buffers.
     !
     implicit none
     !
     ! !ARGUMENTS:
-    integer, intent(in) :: num_urbanc
-    integer, intent(in) :: filter_urbanc(:)
-    type(soilhydrology_type), intent(inout) :: soilhydrology_vars
-    real(r8)      , intent(in) :: dtime
+    real(r8), intent(in) :: dtime
     !
     ! !LOCAL VARIABLES:
     integer(c_int) :: status
-    integer        :: fc, c, idx_perv
 
-    associate( &
-         hkdepth    => soilhydrology_vars%hkdepth_col , &
-         topo_slope => col_pp%topo_slope                &
-         )
+    ! --------------------------------------------------------
+    ! Compute
+    ! --------------------------------------------------------
+    call UrbanComputeDrainage(urbanxx, dtime, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! --------------------------------------------------------
-      ! Pack 1D input buffers for pervious road columns
-      ! --------------------------------------------------------
-      idx_perv = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-        if (col_pp%itype(c) == icol_road_perv) then
-          idx_perv = idx_perv + 1
-          hkdepth_in(idx_perv)    = hkdepth(c)
-          topo_slope_in(idx_perv) = topo_slope(c)
-        end if
-      end do
+    ! --------------------------------------------------------
+    ! Retrieve outputs
+    ! --------------------------------------------------------
+    call UrbanGetDrainFluxPerviousRoad(urbanxx, c_loc(out_qflx_drain), &
+         module_num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! Set inputs
-      call UrbanSetHkDepthForPerviousRoad(urbanxx, c_loc(hkdepth_in), &
-           module_num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetTopoSlopeForPerviousRoad(urbanxx, c_loc(topo_slope_in), &
-           module_num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! --------------------------------------------------------
-      ! Compute
-      ! --------------------------------------------------------
-      call UrbanComputeDrainage(urbanxx, dtime, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! --------------------------------------------------------
-      ! Retrieve outputs
-      ! --------------------------------------------------------
-      call UrbanGetDrainFluxPerviousRoad(urbanxx, c_loc(out_qflx_drain), &
-           module_num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetRsubSatPerviousRoad(urbanxx, c_loc(out_qflx_rsub_sat), &
-           module_num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-    end associate
+    call UrbanGetRsubSatPerviousRoad(urbanxx, c_loc(out_qflx_rsub_sat), &
+         module_num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
   end subroutine urbanxx_drainage
 

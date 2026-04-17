@@ -152,8 +152,7 @@ contains
          call Drainage(bounds, num_hydrologyc, filter_hydrologyc, &
               num_urbanc, filter_urbanc,&
               soilhydrology_vars, soilstate_vars, ocn2lnd_vars, dtime)
-         call urbanxx_drainage(num_urbanc, filter_urbanc, &
-              soilhydrology_vars, dtime)
+         call urbanxx_drainage(dtime)
          call urbanxx_drainage_check(num_urbanc, filter_urbanc)
       endif
 

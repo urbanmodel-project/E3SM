@@ -16,6 +16,7 @@ module UrbanxxMod
   use ColumnDataType       , only : col_es, col_pp
   use LandunitDataType     , only : lun_es, lun_ws
   use SoilStateType        , only : soilstate_type
+  use SoilHydrologyType    , only : soilhydrology_type
   use abortutils           , only : endrun
   use UrbanxxInstanceMod   , only : urbanxx, numBands, numTypes
   use TopounitDataType     , only : topounit_atmospheric_state
@@ -32,7 +33,7 @@ contains
   subroutine urbanxx_initialize(bounds, num_urbanl, filter_urbanl, &
        num_urbanc, filter_urbanc, num_urbanp, filter_urbanp, &
        urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
-       soilstate_vars)
+       soilstate_vars, soilhydrology_vars)
     implicit none
     !
     ! !ARGUMENTS:
@@ -48,6 +49,7 @@ contains
     type(surfalb_type)     , intent(in) :: surfalb_vars
     type(topounit_atmospheric_state) , intent(in) :: top_as
     type(soilstate_type)   , intent(in) :: soilstate_vars
+    type(soilhydrology_type), intent(in) :: soilhydrology_vars
 
     integer :: status
 
@@ -67,7 +69,7 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     call SetUrbanParameters(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
-         urbanparams_vars, top_as, soilstate_vars)
+         urbanparams_vars, top_as, soilstate_vars, soilhydrology_vars)
 
     ! Setup urban model (initialize temperatures and other setup tasks)
     call UrbanSetup(urbanxx, status)
@@ -1089,18 +1091,19 @@ contains
 
    !-----------------------------------------------------------------------
    subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
-        urbanparams_vars, top_as, soilstate_vars)
+        urbanparams_vars, top_as, soilstate_vars, soilhydrology_vars)
      !
      implicit none
      !
-     type(UrbanType)        , intent(inout) :: urban
-     integer(c_int)         , intent(in)    :: num_urbanl
-     integer                , intent(in)    :: filter_urbanl(:) ! urban landunit filter
-     integer(c_int)         , intent(in)    :: num_urbanc
-     integer                , intent(in)    :: filter_urbanc(:) ! urban column filter
-     type(urbanparams_type) , intent(in)    :: urbanparams_vars
-     type(topounit_atmospheric_state) , intent(in)    :: top_as
-     type(soilstate_type)   , intent(in)    :: soilstate_vars
+     type(UrbanType)          , intent(inout) :: urban
+     integer(c_int)           , intent(in)    :: num_urbanl
+     integer                  , intent(in)    :: filter_urbanl(:) ! urban landunit filter
+     integer(c_int)           , intent(in)    :: num_urbanc
+     integer                  , intent(in)    :: filter_urbanc(:) ! urban column filter
+     type(urbanparams_type)   , intent(in)    :: urbanparams_vars
+     type(topounit_atmospheric_state), intent(in)    :: top_as
+     type(soilstate_type)     , intent(in)    :: soilstate_vars
+     type(soilhydrology_type) , intent(in)    :: soilhydrology_vars
 
      call SetCanyonHwr(urban, num_urbanl, filter_urbanl)
      call SetFracPervRoadOfTotalRoad(urban, num_urbanl, filter_urbanl)
@@ -1115,8 +1118,65 @@ contains
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)
+     call SetHkDepthAndTopoSlope(urban, num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars)
      call SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
 
    end subroutine SetUrbanParameters
+
+   !-----------------------------------------------------------------------
+   subroutine SetHkDepthAndTopoSlope(urban, num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars)
+     !
+     ! !DESCRIPTION:
+     ! Set e-folding depth for saturated hydraulic conductivity and
+     ! topographic slope for pervious road columns.
+     ! These are time-invariant parameters set once during initialization.
+     !
+     use ColumnType    , only : col_pp
+     use column_varcon , only : icol_road_perv
+     use SoilHydrologyType, only : soilhydrology_type
+     !
+     implicit none
+     !
+     type(UrbanType)          , intent(in) :: urban
+     integer(c_int)           , intent(in) :: num_urbanl
+     integer(c_int)           , intent(in) :: num_urbanc
+     integer                  , intent(in) :: filter_urbanc(:)
+     type(soilhydrology_type) , intent(in) :: soilhydrology_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, idx_perv
+     real(c_double), allocatable, target  :: hkdepth_buf(:)
+     real(c_double), allocatable, target  :: topo_slope_buf(:)
+
+     allocate(hkdepth_buf(num_urbanl))
+     allocate(topo_slope_buf(num_urbanl))
+
+     associate( &
+          hkdepth    => soilhydrology_vars%hkdepth_col , &
+          topo_slope => col_pp%topo_slope                &
+          )
+
+       idx_perv = 0
+       do fc = 1, num_urbanc
+         c = filter_urbanc(fc)
+         if (col_pp%itype(c) == icol_road_perv) then
+           idx_perv = idx_perv + 1
+           hkdepth_buf(idx_perv)    = hkdepth(c)
+           topo_slope_buf(idx_perv) = topo_slope(c)
+         end if
+       end do
+
+     end associate
+
+     call UrbanSetHkDepthForPerviousRoad(urban, c_loc(hkdepth_buf), num_urbanl, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+     call UrbanSetTopoSlopeForPerviousRoad(urban, c_loc(topo_slope_buf), num_urbanl, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+     deallocate(hkdepth_buf)
+     deallocate(topo_slope_buf)
+
+   end subroutine SetHkDepthAndTopoSlope
 
 end module UrbanxxMod
