@@ -295,8 +295,7 @@ contains
       ! URBANxx WaterTable runs first (before ELM modifies wa_col / h2osoi)
       call urbanxx_waterTable(num_urbanl, num_urbanc, filter_urbanc, &
            soilhydrology_vars, dtime)
-      call urbanxx_dewCondensation(num_urbanl, num_urbanc, filter_urbanc, &
-           soilhydrology_vars, dtime)
+      call urbanxx_dewCondensation(num_urbanl, dtime)
 
       if (use_pflotran .and. pf_hmode) then
 
@@ -316,8 +315,7 @@ contains
 
       call urbanxx_waterTable_check(num_urbanl, num_urbanc, filter_urbanc, &
            soilhydrology_vars)
-      call urbanxx_dewCondensation_check(num_urbanl, num_urbanc, filter_urbanc, &
-           soilhydrology_vars)
+      call urbanxx_dewCondensation_check(num_urbanl, num_urbanc, filter_urbanc)
 
 
 #ifndef _OPENACC

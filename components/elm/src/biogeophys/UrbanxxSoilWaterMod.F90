@@ -18,10 +18,6 @@ module UrbanxxSoilWaterMod
 
   private
 
-  ! Persistent input buffers (allocated once in init)
-  real(c_double) , allocatable, target :: zwt(:)
-  real(c_double) , allocatable, target :: qflxTran(:)
-
   ! Persistent output buffers (allocated once in init)
   ! 2D: (num_urbanl * nlevgrnd) flattened
   real(c_double) , allocatable, target, public :: out_h2osoi_liq(:)
@@ -51,12 +47,6 @@ contains
 
     totalSize = num_urbanl * nlevgrnd
 
-    ! Input buffers — 1D
-    allocate(zwt(num_urbanl))
-
-    ! Input buffers — 2D flattened
-    allocate(qflxTran(totalSize))
-
     ! Output buffers — 2D flattened
     allocate(out_h2osoi_liq(totalSize))
     allocate(out_h2osoi_vol(totalSize))
@@ -68,107 +58,29 @@ contains
   end subroutine urbanxx_soilWater_init
 
   !-----------------------------------------------------------------------
-  subroutine urbanxx_soilWater(num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars, dtime)
+  subroutine urbanxx_soilWater(num_urbanl, dtime)
     !
     ! !DESCRIPTION:
-    ! Set soil water boundary conditions for urban areas
+    ! Compute soil hydrology for urban pervious road columns.
     !
-    use WaterFluxType, only : waterflux_type
-    use WaterStateType, only : waterstate_type
-    use ColumnType, only : col_pp
-    use column_varcon, only : icol_road_perv
     use elm_varpar, only : nlevgrnd
-    use SoilHydrologyType          , only : soilhydrology_type
     !
     implicit none
     !
     ! !ARGUMENTS:
     integer(c_int), intent(in) :: num_urbanl
-    integer(c_int), intent(in) :: num_urbanc
-    integer       , intent(in) :: filter_urbanc(:)  ! urban column filter
-    type(soilhydrology_type) , intent(in) :: soilhydrology_vars
     real(r8)      , intent(in) :: dtime                ! time step (s)
     !
     ! !LOCAL VARIABLES:
-    integer(c_int)                       :: status
-    integer                              :: fc, c, j, idx, idx_perv, nlevbed
-    integer(c_int)                       :: totalSize
-    integer(c_int), dimension(2)         :: size2D
-    logical(c_bool)                      :: isLayoutLeft
+    integer(c_int)               :: status
+    integer(c_int)               :: totalSize
+    integer(c_int), dimension(2) :: size2D
 
-    associate(                             &
-         qflx_rootsoi => col_wf%qflx_rootsoi , & ! Input: [real(r8) (:,:)] vegetation/soil water exchange (mm H2O/s) (+ = to atm)
-         nlev2bed     => col_pp%nlevbed      , & ! Input: [integer (:)] number of layers to bedrock
-         zwt_col      => soilhydrology_vars%zwt_col & ! Input: [real(r8) (:)] water table depth (m)
-         )
+    totalSize = num_urbanl * nlevgrnd
+    size2D(1) = num_urbanl
+    size2D(2) = nlevgrnd
 
-      ! Pack water table depth for pervious road columns
-      ! (QflxInfl is already set by urbanxx_infiltration which runs before this)
-      idx_perv = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-
-        if (col_pp%itype(c) == icol_road_perv) then
-           idx_perv = idx_perv + 1
-           zwt(idx_perv) = zwt_col(c)
-        end if
-      end do
-
-      call UrbanSetWaterTableDepth(urbanxx, c_loc(zwt), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! Set soil water content and transpiration flux (2D: per landunit x nlevgrnd)
-      totalSize = num_urbanl * nlevgrnd
-      size2D(1) = num_urbanl
-      size2D(2) = nlevgrnd
-
-      ! Check Kokkos memory layout
-      isLayoutLeft = UrbanKokkosIsLayoutLeft()
-
-      if (isLayoutLeft) then
-        ! LayoutLeft: First dimension (landunits) varies fastest
-        ! Iterate: layer (outer), landunits (inner)
-        idx = 0
-        do j = 1, nlevgrnd
-          idx_perv = 0
-          do fc = 1, num_urbanc
-            c = filter_urbanc(fc)
-            if (col_pp%itype(c) == icol_road_perv) then
-              idx_perv = idx_perv + 1
-              idx = idx + 1
-              nlevbed = nlev2bed(c)
-              if (j <= nlevbed) then
-                qflxTran(idx) = qflx_rootsoi(c, j)
-              else
-                qflxTran(idx) = 0.0_r8
-              end if
-            end if
-          end do
-        end do
-      else
-        ! LayoutRight: Last dimension (layers) varies fastest
-        ! Iterate: landunits (outer), layer (inner)
-        idx = 0
-        do fc = 1, num_urbanc
-          c = filter_urbanc(fc)
-          if (col_pp%itype(c) == icol_road_perv) then
-            nlevbed = nlev2bed(c)
-            do j = 1, nlevgrnd
-              idx = idx + 1
-              if (j <= nlevbed) then
-                qflxTran(idx) = qflx_rootsoi(c, j)
-              else
-                qflxTran(idx) = 0.0_r8
-              end if
-            end do
-          end if
-        end do
-      end if
-
-      call UrbanSetTranspirationFluxForPerviousRoad(urbanxx, c_loc(qflxTran), size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanComputeHydrology(urbanxx, dtime, status)
+    call UrbanComputeHydrology(urbanxx, dtime, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       ! Extract hydrology outputs from UrbanXX
@@ -183,8 +95,6 @@ contains
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
       call UrbanGetWaterDeficitFluxPerviousRoad(urbanxx, c_loc(out_qflx_deficit), num_urbanl, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-     end associate
 
   end subroutine urbanxx_soilWater
 
@@ -254,14 +164,11 @@ contains
             max_error_liq     = max(max_error_liq,     abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)))
             max_rel_error_liq = max(max_rel_error_liq, abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)) / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
             max_error_vol     = max(max_error_vol,     abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
-            !write(*,*)c,j,h2osoi_liq(c,j), h2osoi_liq_2d(idx_perv,j), (h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j))
-            !write(*,*)c,j,h2osoi_vol(c,j), h2osoi_vol_2d(idx_perv,j), (h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j))
           end do
         end if
       end do
 
       write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
-      !write(iulog,*) 'Max error in soil water (h2osoi_vol): ', max_error_vol
 
       deallocate(h2osoi_liq_2d)
       deallocate(h2osoi_vol_2d)
