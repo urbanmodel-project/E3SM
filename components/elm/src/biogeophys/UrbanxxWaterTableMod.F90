@@ -22,7 +22,6 @@ module UrbanxxWaterTableMod
   private
 
   ! Persistent input buffers (allocated once in init)
-  real(c_double), allocatable, target :: wa_in(:)
   real(c_double), allocatable, target :: qcharge_in(:)
 
   ! Persistent output buffers (allocated once in init)
@@ -54,17 +53,29 @@ module UrbanxxWaterTableMod
 contains
 
   !-----------------------------------------------------------------------
-  subroutine urbanxx_waterTable_init(num_urbanl)
+  subroutine urbanxx_waterTable_init(num_urbanl, num_urbanc, filter_urbanc, &
+                                     soilhydrology_vars)
     !
     ! !DESCRIPTION:
-    ! Allocate persistent buffers for water table computation.
+    ! Allocate persistent buffers for water table computation and
+    ! set the initial aquifer water content in URBANxx using persistent memory.
     ! Called once during initialization.
     !
-    use elm_varpar, only : nlevgrnd
+    use elm_varpar        , only : nlevgrnd
+    use ColumnType        , only : col_pp
+    use column_varcon     , only : icol_road_perv
+    use SoilHydrologyType , only : soilhydrology_type
+    use abortutils        , only : endrun
     !
     implicit none
-    integer(c_int), intent(in) :: num_urbanl
+    integer(c_int),          intent(in) :: num_urbanl
+    integer(c_int),          intent(in) :: num_urbanc
+    integer,                 intent(in) :: filter_urbanc(:)
+    type(soilhydrology_type), intent(in) :: soilhydrology_vars
     integer(c_int) :: totalSize
+    integer(c_int) :: status
+    integer        :: fc, c, idx_perv
+    real(c_double), allocatable, target :: wa_in(:)
 
     totalSize = num_urbanl * nlevgrnd
 
@@ -85,13 +96,33 @@ contains
     allocate(out_h2osoi_ice(totalSize))
 
     ! Dew condensation output buffers (1D)
-    allocate(out_top_liq_roof(num_urbanl))
+    allocate(out_top_liq_roof(num_urbanl))      
     allocate(out_top_ice_roof(num_urbanl))
     allocate(out_qflx_sub_snow_roof(num_urbanl))
 
     allocate(out_top_liq_imperv(num_urbanl))
     allocate(out_top_ice_imperv(num_urbanl))
     allocate(out_qflx_sub_snow_imperv(num_urbanl))
+
+    ! --------------------------------------------------------
+    ! Pack initial aquifer water and send to URBANxx persistent memory.
+    ! --------------------------------------------------------
+    associate(wa_col => soilhydrology_vars%wa_col)
+      idx_perv = 0
+      do fc = 1, num_urbanc
+        c = filter_urbanc(fc)
+        if (col_pp%itype(c) == icol_road_perv) then
+          idx_perv = idx_perv + 1
+          wa_in(idx_perv) = wa_col(c)
+        end if
+      end do
+    end associate
+
+    call UrbanSetAquiferWaterForPerviousRoad(urbanxx, c_loc(wa_in), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    deallocate(wa_in)
 
   end subroutine urbanxx_waterTable_init
 
@@ -132,7 +163,6 @@ contains
          qflx_drain     => col_wf%qflx_drain                             , & ! Output: sub-surface drainage [mm H2O/s]
          qflx_rsub_sat  => col_wf%qflx_rsub_sat                          , & ! Output: saturation excess runoff [mm H2O/s]
          zwt_col        => soilhydrology_vars%zwt_col                     , & ! In/Out: water table depth [m]
-         wa_col         => soilhydrology_vars%wa_col                      , & ! In/Out: aquifer water [mm]
          zwt_perched_col => soilhydrology_vars%zwt_perched_col            , & ! Output: perched water table [m]
          qcharge_col    => soilhydrology_vars%qcharge_col                 , & ! Input:  aquifer recharge rate [mm/s]
          nlev2bed       => col_pp%nlevbed                                   & ! Input:  number of layers to bedrock
@@ -146,15 +176,9 @@ contains
         c = filter_urbanc(fc)
         if (col_pp%itype(c) == icol_road_perv) then
           idx_perv = idx_perv + 1
-          wa_in(idx_perv)         = wa_col(c)
           qcharge_in(idx_perv)    = qcharge_col(c)
         end if
       end do
-
-      ! Set 1D inputs
-      call UrbanSetAquiferWaterForPerviousRoad(urbanxx, c_loc(wa_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanSetQchargeForPerviousRoad(urbanxx, c_loc(qcharge_in), &
            num_urbanl, status)
