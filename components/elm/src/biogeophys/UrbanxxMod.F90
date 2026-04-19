@@ -23,6 +23,10 @@ module UrbanxxMod
 
   implicit none
 
+  ! Set to .true. to override URBANxx-internal pedotransfer results with ELM values.
+  ! Avoids precision differences from Kokkos::pow vs Fortran ** in the same formulas.
+  logical, parameter :: use_elm_pervroad_derived_props = .true.
+
   private
 
   public :: urbanxx_initialize
@@ -76,6 +80,16 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     if (masterproc) then
        write(*,*) 'Completed urban model setup'
+    end if
+
+    ! Override derived soil properties with ELM values to eliminate pedotransfer
+    ! precision differences (Kokkos::pow vs Fortran **).
+    if (use_elm_pervroad_derived_props) then
+       if (masterproc) then
+          write(*,*) 'Set pervious road soil properties derived from ELM values'
+       end if
+       call SetPerviousRoadDerivedProperties(urbanxx, num_urbanl, num_urbanc, &
+            filter_urbanc, soilstate_vars)
     end if
 
     ! Allocate persistent buffers for physics modules
@@ -721,6 +735,164 @@ contains
      end associate
 
    end subroutine SetSoilProperties
+
+   !-----------------------------------------------------------------------
+   subroutine SetPerviousRoadDerivedProperties(urban, num_urbanl, num_urbanc, &
+       filter_urbanc, soilstate_vars)
+     !
+     use elm_varpar,    only : nlevgrnd
+     use ColumnType,    only : col_pp
+     use column_varcon, only : icol_road_perv
+     !
+     implicit none
+     !
+     type(UrbanType)      , intent(in) :: urban
+     integer(c_int)       , intent(in) :: num_urbanl
+     integer(c_int)       , intent(in) :: num_urbanc
+     integer              , intent(in) :: filter_urbanc(:)
+     type(soilstate_type) , intent(in) :: soilstate_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, j, idx, nlevbed
+     integer(c_int)                       :: totalSize
+     integer(c_int), dimension(2)         :: size2D
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double), allocatable, target  :: watsat(:)
+     real(c_double), allocatable, target  :: bsw(:)
+     real(c_double), allocatable, target  :: sucsat(:)
+     real(c_double), allocatable, target  :: hksat(:)
+     real(c_double), allocatable, target  :: tkdry(:)
+     real(c_double), allocatable, target  :: tksat(:)
+     real(c_double), allocatable, target  :: tkminerals(:)
+     real(c_double), allocatable, target  :: cvsolids(:)
+
+     associate(                                   &
+          watsat_col => soilstate_vars%watsat_col, & ! Input: [real(r8) (:,:)] volumetric soil water at saturation
+          bsw_col    => soilstate_vars%bsw_col   , & ! Input: [real(r8) (:,:)] Clapp-Hornberger parameter b
+          sucsat_col => soilstate_vars%sucsat_col , & ! Input: [real(r8) (:,:)] minimum soil suction [mm]
+          hksat_col  => soilstate_vars%hksat_col  , & ! Input: [real(r8) (:,:)] hydraulic conductivity at saturation [mm/s]
+          tkdry_col  => soilstate_vars%tkdry_col  , & ! Input: [real(r8) (:,:)] thermal conductivity of dry soil [W/(m K)]
+          tksatu_col => soilstate_vars%tksatu_col , & ! Input: [real(r8) (:,:)] thermal conductivity, saturated soil [W/(m K)]
+          tkmg_col   => soilstate_vars%tkmg_col   , & ! Input: [real(r8) (:,:)] thermal conductivity of soil minerals [W/(m K)]
+          csol_col   => soilstate_vars%csol_col   , & ! Input: [real(r8) (:,:)] heat capacity of soil solids [J/(m3 K)]
+          nlev2bed   => col_pp%nlevbed              & ! Input: [integer (:)] number of layers to bedrock
+          )
+
+       totalSize = num_urbanl * nlevgrnd
+       size2D(1) = num_urbanl
+       size2D(2) = nlevgrnd
+
+       allocate(watsat(totalSize))
+       allocate(bsw(totalSize))
+       allocate(sucsat(totalSize))
+       allocate(hksat(totalSize))
+       allocate(tkdry(totalSize))
+       allocate(tksat(totalSize))
+       allocate(tkminerals(totalSize))
+       allocate(cvsolids(totalSize))
+
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       if (isLayoutLeft) then
+         ! LayoutLeft: First dimension (landunits) varies fastest
+         ! Iterate: layer (outer), landunits (inner)
+         idx = 0
+         do j = 1, nlevgrnd
+           do fc = 1, num_urbanc
+             c = filter_urbanc(fc)
+             if (col_pp%itype(c) == icol_road_perv) then
+               idx = idx + 1
+               nlevbed = nlev2bed(c)
+               if (j <= nlevbed) then
+                 watsat(idx)    = watsat_col(c, j)
+                 bsw(idx)       = bsw_col(c, j)
+                 sucsat(idx)    = sucsat_col(c, j)
+                 hksat(idx)     = hksat_col(c, j)
+                 tkdry(idx)     = tkdry_col(c, j)
+                 tksat(idx)     = tksatu_col(c, j)
+                 tkminerals(idx)= tkmg_col(c, j)
+                 cvsolids(idx)  = csol_col(c, j)
+               else
+                 ! Below bedrock: duplicate last active layer
+                 watsat(idx)    = watsat_col(c, nlevbed)
+                 bsw(idx)       = bsw_col(c, nlevbed)
+                 sucsat(idx)    = sucsat_col(c, nlevbed)
+                 hksat(idx)     = hksat_col(c, nlevbed)
+                 tkdry(idx)     = tkdry_col(c, nlevbed)
+                 tksat(idx)     = tksatu_col(c, nlevbed)
+                 tkminerals(idx)= tkmg_col(c, nlevbed)
+                 cvsolids(idx)  = csol_col(c, nlevbed)
+               end if
+             end if
+           end do
+         end do
+       else
+         ! LayoutRight: Last dimension (layers) varies fastest
+         ! Iterate: landunits (outer), layer (inner)
+         idx = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_road_perv) then
+             nlevbed = nlev2bed(c)
+             do j = 1, nlevgrnd
+               idx = idx + 1
+               if (j <= nlevbed) then
+                 watsat(idx)    = watsat_col(c, j)
+                 bsw(idx)       = bsw_col(c, j)
+                 sucsat(idx)    = sucsat_col(c, j)
+                 hksat(idx)     = hksat_col(c, j)
+                 tkdry(idx)     = tkdry_col(c, j)
+                 tksat(idx)     = tksatu_col(c, j)
+                 tkminerals(idx)= tkmg_col(c, j)
+                 cvsolids(idx)  = csol_col(c, j)
+               else
+                 ! Below bedrock: duplicate last active layer
+                 watsat(idx)    = watsat_col(c, nlevbed)
+                 bsw(idx)       = bsw_col(c, nlevbed)
+                 sucsat(idx)    = sucsat_col(c, nlevbed)
+                 hksat(idx)     = hksat_col(c, nlevbed)
+                 tkdry(idx)     = tkdry_col(c, nlevbed)
+                 tksat(idx)     = tksatu_col(c, nlevbed)
+                 tkminerals(idx)= tkmg_col(c, nlevbed)
+                 cvsolids(idx)  = csol_col(c, nlevbed)
+               end if
+             end do
+           end if
+         end do
+       end if
+
+       call UrbanSetWatSatForPerviousRoad(urban, c_loc(watsat), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetBswForPerviousRoad(urban, c_loc(bsw), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetSucSatForPerviousRoad(urban, c_loc(sucsat), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetHkSatForPerviousRoad(urban, c_loc(hksat), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTkDryForPerviousRoad(urban, c_loc(tkdry), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTkSatForPerviousRoad(urban, c_loc(tksat), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTkMineralsForPerviousRoad(urban, c_loc(tkminerals), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetCvSolidsForPerviousRoad(urban, c_loc(cvsolids), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       if (masterproc) then
+         write(iulog,*) 'Set derived soil properties for pervious road from ELM data (watsat,bsw,sucsat,hksat,tkdry,tksat,tkminerals,cvsolids)'
+       end if
+
+       deallocate(watsat)
+       deallocate(bsw)
+       deallocate(sucsat)
+       deallocate(hksat)
+       deallocate(tkdry)
+       deallocate(tksat)
+       deallocate(tkminerals)
+       deallocate(cvsolids)
+     end associate
+
+   end subroutine SetPerviousRoadDerivedProperties
 
    !-----------------------------------------------------------------------
    subroutine SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
