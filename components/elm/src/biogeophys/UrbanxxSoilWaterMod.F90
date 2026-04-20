@@ -169,6 +169,10 @@ contains
       end do
 
       write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
+      if (max_error_liq > 1.0e-6_r8) then
+        write(iulog,*) 'ERROR: Max soil liquid water error exceeds threshold!'
+        call exit(0)
+      end if
 
       deallocate(h2osoi_liq_2d)
       deallocate(h2osoi_vol_2d)

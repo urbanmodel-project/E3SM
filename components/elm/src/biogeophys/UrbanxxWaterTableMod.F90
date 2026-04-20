@@ -134,12 +134,8 @@ contains
     ! Set water table inputs for pervious road columns, call
     ! UrbanComputeWaterTable, and unpack outputs into ELM arrays.
     !
-    use ColumnType           , only : col_pp
-    use column_varcon        , only : icol_road_perv
     use elm_varpar           , only : nlevgrnd
     use SoilHydrologyType    , only : soilhydrology_type
-    use abortutils           , only : endrun
-    use shr_log_mod          , only : errmsg => shr_log_errmsg
     !
     implicit none
     !
@@ -152,95 +148,15 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer(c_int)               :: status
-    integer                      :: fc, c, j, idx, idx_perv, nlevbed
-    integer(c_int)               :: totalSize
     integer(c_int), dimension(2) :: size2D
     logical(c_bool)              :: isLayoutLeft
 
     associate(                                                               &
-         h2osoi_liq     => col_ws%h2osoi_liq                              , & ! Output: liquid water [kg/m2]
-         h2osoi_ice     => col_ws%h2osoi_ice                              , & ! Output: ice lens [kg/m2]
          qflx_drain     => col_wf%qflx_drain                             , & ! Output: sub-surface drainage [mm H2O/s]
          qflx_rsub_sat  => col_wf%qflx_rsub_sat                          , & ! Output: saturation excess runoff [mm H2O/s]
          zwt_col        => soilhydrology_vars%zwt_col                     , & ! In/Out: water table depth [m]
-         zwt_perched_col => soilhydrology_vars%zwt_perched_col            , & ! Output: perched water table [m]
-         qcharge_col    => soilhydrology_vars%qcharge_col                 , & ! Input:  aquifer recharge rate [mm/s]
-         nlev2bed       => col_pp%nlevbed                                   & ! Input:  number of layers to bedrock
+         zwt_perched_col => soilhydrology_vars%zwt_perched_col              & ! Output: perched water table [m]
          )
-
-      ! --------------------------------------------------------
-      ! Pack 1D input buffers for pervious road columns
-      ! --------------------------------------------------------
-      idx_perv = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-        if (col_pp%itype(c) == icol_road_perv) then
-          idx_perv = idx_perv + 1
-          qcharge_in(idx_perv)    = qcharge_col(c)
-        end if
-      end do
-
-      call UrbanSetQchargeForPerviousRoad(urbanxx, c_loc(qcharge_in), &
-           num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! --------------------------------------------------------
-      ! Set h2osoi_liq and h2osoi_ice from current ELM values
-      ! (UrbanComputeWaterTable is called BEFORE ELM's WaterTable modifies them)
-      ! Reuse out_h2osoi_liq/ice as pack buffers; they are overwritten by getters later.
-      ! --------------------------------------------------------
-      totalSize = num_urbanl * nlevgrnd
-      size2D(1) = num_urbanl
-      size2D(2) = nlevgrnd
-      isLayoutLeft = UrbanKokkosIsLayoutLeft()
-
-      if (isLayoutLeft) then
-        idx = 0
-        do j = 1, nlevgrnd
-          idx_perv = 0
-          do fc = 1, num_urbanc
-            c = filter_urbanc(fc)
-            if (col_pp%itype(c) == icol_road_perv) then
-              idx_perv = idx_perv + 1
-              idx = idx + 1
-              nlevbed = nlev2bed(c)
-              if (j <= nlevbed) then
-                out_h2osoi_liq(idx) = h2osoi_liq(c, j)
-                out_h2osoi_ice(idx) = h2osoi_ice(c, j)
-              else
-                out_h2osoi_liq(idx) = 0.0_r8
-                out_h2osoi_ice(idx) = 0.0_r8
-              end if
-            end if
-          end do
-        end do
-      else
-        idx = 0
-        do fc = 1, num_urbanc
-          c = filter_urbanc(fc)
-          if (col_pp%itype(c) == icol_road_perv) then
-            nlevbed = nlev2bed(c)
-            do j = 1, nlevgrnd
-              idx = idx + 1
-              if (j <= nlevbed) then
-                out_h2osoi_liq(idx) = h2osoi_liq(c, j)
-                out_h2osoi_ice(idx) = h2osoi_ice(c, j)
-              else
-                out_h2osoi_liq(idx) = 0.0_r8
-                out_h2osoi_ice(idx) = 0.0_r8
-              end if
-            end do
-          end if
-        end do
-      end if
-
-      call UrbanSetSoilLiquidWaterForPerviousRoad(urbanxx, c_loc(out_h2osoi_liq), &
-           size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanSetSoilIceContentForPerviousRoad(urbanxx, c_loc(out_h2osoi_ice), &
-           size2D, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       ! --------------------------------------------------------
       ! Compute
@@ -278,6 +194,8 @@ contains
       ! --------------------------------------------------------
       ! Retrieve 2D outputs (h2osoi_liq, h2osoi_ice)
       ! --------------------------------------------------------
+      size2D(1) = num_urbanl
+      size2D(2) = nlevgrnd
       isLayoutLeft = UrbanKokkosIsLayoutLeft()
 
       call UrbanGetSoilLiquidWaterPerviousRoad(urbanxx, c_loc(out_h2osoi_liq), &
