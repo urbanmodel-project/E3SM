@@ -803,25 +803,21 @@ contains
              if (col_pp%itype(c) == icol_road_perv) then
                idx = idx + 1
                nlevbed = nlev2bed(c)
+               tkdry(idx)     = tkdry_col(c, j)
+               tksat(idx)     = tksatu_col(c, j)
+               tkminerals(idx)= tkmg_col(c, j)
+               cvsolids(idx)  = csol_col(c, j)
                if (j <= nlevbed) then
                  watsat(idx)    = watsat_col(c, j)
                  bsw(idx)       = bsw_col(c, j)
                  sucsat(idx)    = sucsat_col(c, j)
                  hksat(idx)     = hksat_col(c, j)
-                 tkdry(idx)     = tkdry_col(c, j)
-                 tksat(idx)     = tksatu_col(c, j)
-                 tkminerals(idx)= tkmg_col(c, j)
-                 cvsolids(idx)  = csol_col(c, j)
                else
                  ! Below bedrock: duplicate last active layer
                  watsat(idx)    = watsat_col(c, nlevbed)
                  bsw(idx)       = bsw_col(c, nlevbed)
                  sucsat(idx)    = sucsat_col(c, nlevbed)
                  hksat(idx)     = hksat_col(c, nlevbed)
-                 tkdry(idx)     = tkdry_col(c, nlevbed)
-                 tksat(idx)     = tksatu_col(c, nlevbed)
-                 tkminerals(idx)= tkmg_col(c, nlevbed)
-                 cvsolids(idx)  = csol_col(c, nlevbed)
                end if
              end if
            end do
@@ -836,25 +832,21 @@ contains
              nlevbed = nlev2bed(c)
              do j = 1, nlevgrnd
                idx = idx + 1
+               tkdry(idx)     = tkdry_col(c, j)
+               tksat(idx)     = tksatu_col(c, j)
+               tkminerals(idx)= tkmg_col(c, j)
+               cvsolids(idx)  = csol_col(c, j)
                if (j <= nlevbed) then
                  watsat(idx)    = watsat_col(c, j)
                  bsw(idx)       = bsw_col(c, j)
                  sucsat(idx)    = sucsat_col(c, j)
                  hksat(idx)     = hksat_col(c, j)
-                 tkdry(idx)     = tkdry_col(c, j)
-                 tksat(idx)     = tksatu_col(c, j)
-                 tkminerals(idx)= tkmg_col(c, j)
-                 cvsolids(idx)  = csol_col(c, j)
                else
                  ! Below bedrock: duplicate last active layer
                  watsat(idx)    = watsat_col(c, nlevbed)
                  bsw(idx)       = bsw_col(c, nlevbed)
                  sucsat(idx)    = sucsat_col(c, nlevbed)
                  hksat(idx)     = hksat_col(c, nlevbed)
-                 tkdry(idx)     = tkdry_col(c, nlevbed)
-                 tksat(idx)     = tksatu_col(c, nlevbed)
-                 tkminerals(idx)= tkmg_col(c, nlevbed)
-                 cvsolids(idx)  = csol_col(c, nlevbed)
                end if
              end do
            end if
