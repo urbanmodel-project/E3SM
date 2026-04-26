@@ -60,7 +60,11 @@ contains
   subroutine urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, temperature_vars)
     !
     ! !DESCRIPTION:
-    ! Set building temperature and compute heat diffusion for urban areas
+    ! Compute heat diffusion for urban areas.
+    ! Impervious road soil moisture (WaterLiquid/WaterIce) is maintained
+    ! as persistent URBANxx state, initialized once from ELM at startup
+    ! and updated each timestep via an internal phase change step inside
+    ! UrbanComputeHeatDiffusion.  No per-timestep data transfer from ELM.
     !
     use TemperatureType, only : temperature_type
     use ColumnType     , only : col_pp

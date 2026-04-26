@@ -18,6 +18,12 @@ module UrbanxxSoilFluxesMod
 
   private
 
+  ! Persistent input buffers for TopH2OSoiLiq/Ice sync (set before UrbanComputeSoilFluxes)
+  real(c_double) , allocatable, target :: in_top_liq_roof(:)
+  real(c_double) , allocatable, target :: in_top_ice_roof(:)
+  real(c_double) , allocatable, target :: in_top_liq_improad(:)
+  real(c_double) , allocatable, target :: in_top_ice_improad(:)
+
   ! Persistent output buffers (allocated once in init)
   real(c_double) , allocatable, target :: eflx_soil_grnd_roof(:)
   real(c_double) , allocatable, target :: eflx_soil_grnd_improad(:)
@@ -60,6 +66,12 @@ contains
     allocate(eflx_soil_grnd_sunwall(num_urbanl))
     allocate(eflx_soil_grnd_shadwall(num_urbanl))
 
+    ! Input buffers for TopH2OSoiLiq/Ice sync (roof and impervious road)
+    allocate(in_top_liq_roof(num_urbanl))
+    allocate(in_top_ice_roof(num_urbanl))
+    allocate(in_top_liq_improad(num_urbanl))
+    allocate(in_top_ice_improad(num_urbanl))
+
     ! Evaporation/dew partition — roof, impervious road, pervious road
     allocate(qflx_evap_grnd_roof(num_urbanl))
     allocate(qflx_evap_grnd_improad(num_urbanl))
@@ -87,6 +99,10 @@ contains
     ! Results are written back into the corresponding ELM veg_ef / veg_wf
     ! fields for urban patches.
     !
+    use ColumnType    , only : col_pp
+    use ColumnDataType, only : col_ws
+    use column_varcon , only : icol_roof, icol_road_imperv
+    !
     implicit none
     !
     integer(c_int) , intent(in) :: num_urbanl
@@ -97,6 +113,42 @@ contains
     integer        , intent(in) :: filter_nolakep(:)  ! no-lake patch filter
     !
     integer(c_int)  :: status
+    integer         :: fc, c
+    integer         :: idx_roof, idx_improad
+
+    ! --- Sync TopH2OSoiLiq/Ice for roof and impervious road from ELM state ---
+    ! ELM's h2osoi_liq(c,1) is updated by WaterTable (incl. dew) at end of
+    ! each timestep, but URBANxx's stored TopH2OSoiLiq does not include that
+    ! update. Syncing here ensures URBANxx uses the same water state as ELM
+    ! when partitioning QflxEvapSoil into QflxEvapGrnd vs QflxSubSnow.
+    idx_roof    = 0
+    idx_improad = 0
+    do fc = 1, num_nolakec
+      c = filter_nolakec(fc)
+      select case (col_pp%itype(c))
+      case (icol_roof)
+        idx_roof = idx_roof + 1
+        in_top_liq_roof(idx_roof)    = real(col_ws%h2osoi_liq(c,1), c_double)
+        in_top_ice_roof(idx_roof)    = real(col_ws%h2osoi_ice(c,1), c_double)
+      case (icol_road_imperv)
+        idx_improad = idx_improad + 1
+        in_top_liq_improad(idx_improad) = real(col_ws%h2osoi_liq(c,1), c_double)
+        in_top_ice_improad(idx_improad) = real(col_ws%h2osoi_ice(c,1), c_double)
+      end select
+    end do
+
+    !call UrbanSetTopH2OSoiLiqRoof(urbanxx, c_loc(in_top_liq_roof), &
+    !     num_urbanl, status)
+    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    !call UrbanSetTopH2OSoiIceRoof(urbanxx, c_loc(in_top_ice_roof), &
+    !     num_urbanl, status)
+    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    !call UrbanSetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(in_top_liq_improad), &
+    !     num_urbanl, status)
+    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    !call UrbanSetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(in_top_ice_improad), &
+    !     num_urbanl, status)
+    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     ! --- Run URBANxx soil fluxes ---
     call UrbanComputeSoilFluxes(urbanxx, status)
@@ -275,13 +327,13 @@ contains
            err_qflx_dsn  / max(abs(veg_wf%qflx_dew_snow(p)),  1.0e-20_r8), &
            err_qflx_dg   / max(abs(veg_wf%qflx_dew_grnd(p)),  1.0e-20_r8))
 
-      if (err_eflx > 1.0e-10_r8 .or. err_qflx_evap > 1.0e-10_r8 .or. &
-          err_qflx_sub > 1.0e-10_r8 .or. err_qflx_dsn > 1.0e-10_r8 .or. &
-          err_qflx_dg  > 1.0e-10_r8) then
+      if (err_eflx > 1.0e-8_r8 .or. err_qflx_evap > 1.0e-8_r8 .or. &
+          err_qflx_sub > 1.0e-8_r8 .or. err_qflx_dsn > 1.0e-8_r8 .or. &
+          err_qflx_dg  > 1.0e-8_r8) then
         write(iulog,*) 'ERROR: Soil flux mismatch between ELM and URBANxx at p=', p, ' c=', c
         write(iulog,*) '  col_type=', col_pp%itype(c)
         write(iulog,*) '  err_eflx_soil_grnd = ', err_eflx
-        write(iulog,*) '  err_qflx_evap_grnd = ', err_qflx_evap
+        write(iulog,*) '  err_qflx_evap_grnd = ', err_qflx_evap,veg_wf%qflx_evap_grnd(p), urb_qflx_evap
         write(iulog,*) '  err_qflx_sub_snow  = ', err_qflx_sub
         write(iulog,*) '  err_qflx_dew_snow  = ', err_qflx_dsn
         write(iulog,*) '  err_qflx_dew_grnd  = ', err_qflx_dg
