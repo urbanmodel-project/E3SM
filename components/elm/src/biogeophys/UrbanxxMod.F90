@@ -1063,6 +1063,88 @@ contains
    end subroutine SetBuildingTemperature
 
    !-----------------------------------------------------------------------
+   subroutine SetImperviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     !
+     ! !DESCRIPTION:
+     ! Initialize URBANxx's persistent WaterLiquid/WaterIce for impervious road
+     ! deep soil layers from ELM's initial h2osoi_liq/h2osoi_ice.  Called once
+     ! at startup/restart alongside SetLayerTemperatures.  After initialization,
+     ! ComputeHeatDiffusion maintains these arrays internally via phase change.
+     !
+     use elm_varpar     , only : nlevgrnd
+     use ColumnType     , only : col_pp
+     use ColumnDataType , only : col_ws
+     use column_varcon  , only : icol_road_imperv
+     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
+     !
+     implicit none
+     !
+     type(UrbanType)  , intent(in) :: urban
+     integer(c_int)   , intent(in) :: num_urbanl
+     integer          , intent(in) :: filter_urbanl(:)
+     integer(c_int)   , intent(in) :: num_urbanc
+     integer          , intent(in) :: filter_urbanc(:)
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, j, idx
+     integer(c_int), dimension(2)         :: size2D
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double), allocatable, target  :: h2oLiq(:)
+     real(c_double), allocatable, target  :: h2oIce(:)
+
+     associate( &
+         h2osoi_liq => col_ws%h2osoi_liq, & ! Input: [real(r8) (:,:) ] liquid water (kg/m2)
+         h2osoi_ice => col_ws%h2osoi_ice  & ! Input: [real(r8) (:,:) ] ice lens (kg/m2)
+         )
+
+       allocate(h2oLiq(num_urbanl * nlevgrnd))
+       allocate(h2oIce(num_urbanl * nlevgrnd))
+       size2D(1) = num_urbanl
+       size2D(2) = nlevgrnd
+
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       if (isLayoutLeft) then
+         ! LayoutLeft: landunit index varies fastest
+         idx = 0
+         do j = 1, nlevgrnd
+           do fc = 1, num_urbanc
+             c = filter_urbanc(fc)
+             if (col_pp%itype(c) == icol_road_imperv) then
+               idx = idx + 1
+               h2oLiq(idx) = real(h2osoi_liq(c, j), c_double)
+               h2oIce(idx) = real(h2osoi_ice(c, j), c_double)
+             end if
+           end do
+         end do
+       else
+         ! LayoutRight: layer index varies fastest
+         idx = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_road_imperv) then
+             do j = 1, nlevgrnd
+               idx = idx + 1
+               h2oLiq(idx) = real(h2osoi_liq(c, j), c_double)
+               h2oIce(idx) = real(h2osoi_ice(c, j), c_double)
+             end do
+           end if
+         end do
+       end if
+
+       call UrbanSetSoilLiquidWaterForImperviousRoad(urban, c_loc(h2oLiq), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetSoilIceContentForImperviousRoad(urban, c_loc(h2oIce), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(h2oLiq)
+       deallocate(h2oIce)
+
+     end associate
+
+   end subroutine SetImperviousRoadSoilWater
+
+   !-----------------------------------------------------------------------
    subroutine SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
      !
      use elm_varpar, only : nlevurb, nlevgrnd
@@ -1279,6 +1361,7 @@ contains
      call SetNumberOfActiveLayersImperviousRoad(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetBuildingTemperature(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
+     call SetImperviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)
