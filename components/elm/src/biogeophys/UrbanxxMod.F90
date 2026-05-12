@@ -1136,48 +1136,70 @@ contains
    subroutine SetACHeatFromState(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
      !
      ! !DESCRIPTION:
-     ! Seed URBANxx's EFluxForAC from ELM's eflx_urban_ac for the roof column of
-     ! each urban landunit.  Called once during urbanxx_initialize so that restart
-     ! runs start with the correct previous-timestep AC heat used as the road
-     ! boundary condition in UrbanComputeHeatDiffusion.
-     ! On cold start eflx_urban_ac(c) = 0 (set by InitCold), so seeding is always
-     ! safe regardless of whether this is a restart or cold-start run.
+     ! Seed URBANxx's EFluxForAC from ELM's eflx_urban_ac for each urban
+     ! landunit.  Computes eflx_heat_from_ac_patch (the per-road-area AC heat
+     ! flux) using the same weighted formula as ELM's UrbanFluxesMod:
+     !   eflx_heat_from_ac(l) = wt_roof*|ac_roof| + (1-wt_roof)*hwr*(|ac_sunwall|+|ac_shadwall|)
+     !   eflx_heat_from_ac_patch = eflx_heat_from_ac(l) / (1 - wt_roof)
+     ! Called once during urbanxx_initialize so that restart runs start with
+     ! the correct previous-timestep AC heat used as the road boundary condition
+     ! in UrbanComputeHeatDiffusion.
+     ! On cold start eflx_urban_ac(c) = 0, so seeding is always safe.
      !
      use ColumnType     , only : col_pp
      use ColumnDataType , only : col_ef
-     use column_varcon  , only : icol_roof
+     use column_varcon  , only : icol_roof, icol_sunwall, icol_shadewall
+     use LandunitType   , only : lun_pp
      !
      implicit none
      !
-     type(UrbanType)  , intent(in) :: urban
-     integer(c_int)   , intent(in) :: num_urbanl
-     integer          , intent(in) :: filter_urbanl(:)
-     integer(c_int)   , intent(in) :: num_urbanc
-     integer          , intent(in) :: filter_urbanc(:)
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:)
+     integer(c_int)         , intent(in) :: num_urbanc
+     integer                , intent(in) :: filter_urbanc(:)
      !
      integer(c_int)                       :: status
-     integer                              :: fc, c
+     integer                              :: fl, l, fc, c
      real(c_double), allocatable, target  :: acFlux(:)
+     real(r8) :: ac_roof, ac_sunwall, ac_shadwall, wt_roof, hwr, eflx_heat_from_ac_l
 
      associate( &
-         eflx_urban_ac => col_ef%eflx_urban_ac &
+         eflx_urban_ac => col_ef%eflx_urban_ac  , &
+         canyon_hwr    => lun_pp%canyon_hwr      , &
+         wtlunit_roof  => lun_pp%wtlunit_roof      &
          )
 
        allocate(acFlux(num_urbanl))
        acFlux = 0._c_double
 
-       ! One roof column per landunit; iterate urban columns to find them
-       block
-         integer :: idx
-         idx = 0
+       ! For each urban landunit, compute eflx_heat_from_ac_patch:
+       !   eflx_heat_from_ac_patch = [wt_roof*|ac_roof| + (1-wt_roof)*hwr*(|ac_sunwall|+|ac_shadwall|)]
+       !                             / (1 - wt_roof)
+       do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         wt_roof    = wtlunit_roof(l)
+         hwr        = canyon_hwr(l)
+         ac_roof    = 0._r8
+         ac_sunwall = 0._r8
+         ac_shadwall= 0._r8
          do fc = 1, num_urbanc
            c = filter_urbanc(fc)
-           if (col_pp%itype(c) == icol_roof) then
-             idx = idx + 1
-             acFlux(idx) = real(eflx_urban_ac(c), c_double)
-           end if
+           if (col_pp%landunit(c) /= l) cycle
+           select case (col_pp%itype(c))
+           case (icol_roof)
+             ac_roof     = abs(eflx_urban_ac(c))
+           case (icol_sunwall)
+             ac_sunwall  = abs(eflx_urban_ac(c))
+           case (icol_shadewall)
+             ac_shadwall = abs(eflx_urban_ac(c))
+           end select
          end do
-       end block
+         eflx_heat_from_ac_l = wt_roof * ac_roof + (1._r8 - wt_roof) * hwr * (ac_sunwall + ac_shadwall)
+         if ((1._r8 - wt_roof) > 0._r8) then
+           acFlux(fl) = real(eflx_heat_from_ac_l / (1._r8 - wt_roof), c_double)
+         end if
+       end do
 
        call UrbanSetEFluxForAC(urban, c_loc(acFlux), num_urbanl, status)
        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
