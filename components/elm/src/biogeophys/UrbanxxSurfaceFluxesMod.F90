@@ -45,11 +45,6 @@ module UrbanxxSurfaceFluxesMod
   real(c_double) , allocatable, target, public :: taf(:)
   real(c_double) , allocatable, target, public :: qaf(:)
 
-  ! Persistent input buffers: TopH2OSoiLiq/Ice synced from ELM before each surface flux call
-  real(c_double) , allocatable, target :: in_top_liq_roof(:)
-  real(c_double) , allocatable, target :: in_top_ice_roof(:)
-  real(c_double) , allocatable, target :: in_top_liq_improad(:)
-  real(c_double) , allocatable, target :: in_top_ice_improad(:)
 
   public :: urbanxx_surfaceFluxes_init
   public :: urbanxx_surfaceFluxes
@@ -88,11 +83,6 @@ contains
     allocate(taf(num_urbanl))
     allocate(qaf(num_urbanl))
 
-    ! Input buffers for TopH2OSoiLiq/Ice sync
-    allocate(in_top_liq_roof(num_urbanl))
-    allocate(in_top_ice_roof(num_urbanl))
-    allocate(in_top_liq_improad(num_urbanl))
-    allocate(in_top_ice_improad(num_urbanl))
 
   end subroutine urbanxx_surfaceFluxes_init
 
@@ -102,7 +92,6 @@ contains
     !
     use column_varcon, only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
     use ColumnType, only : col_pp
-    use ColumnDataType, only : col_ws
     !
     implicit none
     !
@@ -123,42 +112,6 @@ contains
     real(r8)                             :: rel_eflx_sh_grnd, rel_qflx_evap_soi, rel_cgrnds, rel_cgrndl
     integer :: idx_roof, idx_road_improv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
     integer :: fc
-    integer :: idx_top_roof, idx_top_improad
-
-    ! --- Sync TopH2OSoiLiq/Ice from ELM state before surface flux computation ---
-    ! URBANxx's stored TopH2OSoiLiq/Ice may be stale (from urbanxx_dewCondensation)
-    ! while ELM's h2osoi_liq(c,1) has been further updated by WaterTable (dew addition).
-    ! Syncing here ensures fwet is computed from the correct water state, which
-    ! in turn gives the correct QflxEvapSoil that matches ELM's qflx_evap_soi.
-    idx_top_roof    = 0
-    idx_top_improad = 0
-    do fc = 1, num_urbanc
-      c = filter_urbanc(fc)
-      select case (col_pp%itype(c))
-      case (icol_roof)
-        idx_top_roof = idx_top_roof + 1
-        in_top_liq_roof(idx_top_roof)    = real(col_ws%h2osoi_liq(c,1), c_double)
-        in_top_ice_roof(idx_top_roof)    = real(col_ws%h2osoi_ice(c,1), c_double)
-      case (icol_road_imperv)
-        idx_top_improad = idx_top_improad + 1
-        in_top_liq_improad(idx_top_improad) = real(col_ws%h2osoi_liq(c,1), c_double)
-        in_top_ice_improad(idx_top_improad) = real(col_ws%h2osoi_ice(c,1), c_double)
-      end select
-    end do
-
-    !call UrbanSetTopH2OSoiLiqRoof(urbanxx, c_loc(in_top_liq_roof), &
-    !     num_urbanl, status)
-    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-    !call UrbanSetTopH2OSoiIceRoof(urbanxx, c_loc(in_top_ice_roof), &
-    !     num_urbanl, status)
-    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-    !call UrbanSetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(in_top_liq_improad), &
-    !     num_urbanl, status)
-    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-    !call UrbanSetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(in_top_ice_improad), &
-    !     num_urbanl, status)
-    !if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
     call UrbanComputeSurfaceFluxes(urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 

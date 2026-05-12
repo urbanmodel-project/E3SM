@@ -82,6 +82,24 @@ contains
        write(*,*) 'Completed urban model setup'
     end if
 
+    ! UrbanSetup (above) calls UrbanInitializePerviousRoadSoils which resets
+    ! perviousRoad WaterLiquid/WaterIce to a default value.  Re-seed them from
+    ! ELM's h2osoi_liq/ice so that thermal conductivity and heat capacity use
+    ! the correct moisture on the first post-restart timestep.
+    call SetPerviousRoadSoilWater(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+    if (masterproc) then
+       write(iulog,*) 'Re-seeded pervious road WaterLiquid/Ice after UrbanSetup from ELM data'
+    end if
+
+    ! Seed water table depth (Zwt) and unconfined aquifer water (Wa) from ELM
+    ! state so that URBANxx hydrology starts from the correct state on restart.
+    ! UrbanInitializePerviousRoadSoils sets Zwt=4.8 m and Wa=0 by default.
+    call SetWaterTableFromState(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
+         soilhydrology_vars)
+    if (masterproc) then
+       write(iulog,*) 'Re-seeded pervious road Zwt/Wa from ELM data'
+    end if
+
     ! Override derived soil properties with ELM values to eliminate pedotransfer
     ! precision differences (Kokkos::pow vs Fortran **).
     if (use_elm_pervroad_derived_props) then
@@ -91,6 +109,15 @@ contains
        call SetPerviousRoadDerivedProperties(urbanxx, num_urbanl, num_urbanc, &
             filter_urbanc, soilstate_vars)
     end if
+
+    ! Seed building temperature from the restored ELM restart state so that
+    ! the HVAC boundary condition is correct on the first post-restart timestep.
+    call SetBuildingTemperatureFromState(urbanxx, num_urbanl, filter_urbanl)
+
+    ! Seed EFluxForAC (previous-timestep AC heat) from ELM's eflx_urban_ac so
+    ! that the road boundary condition in UrbanComputeHeatDiffusion is correct
+    ! on the first post-restart timestep.  On cold start eflx_urban_ac = 0.
+    call SetACHeatFromState(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
 
     ! Allocate persistent buffers for physics modules
     ! (init calls moved to elm_initializeMod.F90 to avoid circular dependency)
@@ -1063,6 +1090,109 @@ contains
    end subroutine SetBuildingTemperature
 
    !-----------------------------------------------------------------------
+   subroutine SetBuildingTemperatureFromState(urban, num_urbanl, filter_urbanl)
+     !
+     ! !DESCRIPTION:
+     ! Seed URBANxx BuildingTemperature from ELM's t_building_lun.  Called once
+     ! during urbanxx_initialize so that restart runs pick up the saved building
+     ! temperature rather than the cold-start value from UrbanSetup.
+     ! Uses module-level lun_es (same pattern as col_es, col_ws, etc.)
+     ! On cold start lun_es%t_building is spval — skip seeding in that case to
+     ! preserve the physically initialised value from UrbanSetup.
+     !
+     use elm_varcon , only : spval
+     implicit none
+     !
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l
+     real(c_double) , allocatable, target :: tBuilding(:)
+
+     allocate(tBuilding(num_urbanl))
+
+     ! On a cold start t_building is spval (not yet computed by UrbanFluxes).
+     ! Only seed URBANxx when ELM has a real value (e.g. from a restart file).
+     if (lun_es%t_building(filter_urbanl(1)) /= spval) then
+       do fl = 1, num_urbanl
+         l = filter_urbanl(fl)
+         tBuilding(fl) = real(lun_es%t_building(l), c_double)
+       end do
+
+       call UrbanSetBuildingTemperature(urban, c_loc(tBuilding), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) then
+         write(iulog,*) 'ERROR: UrbanSetBuildingTemperature failed with status: ', status
+         call endrun(msg=errMsg(__FILE__, __LINE__))
+       end if
+     end if
+
+     deallocate(tBuilding)
+
+   end subroutine SetBuildingTemperatureFromState
+
+   !-----------------------------------------------------------------------
+   subroutine SetACHeatFromState(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     !
+     ! !DESCRIPTION:
+     ! Seed URBANxx's EFluxForAC from ELM's eflx_urban_ac for the roof column of
+     ! each urban landunit.  Called once during urbanxx_initialize so that restart
+     ! runs start with the correct previous-timestep AC heat used as the road
+     ! boundary condition in UrbanComputeHeatDiffusion.
+     ! On cold start eflx_urban_ac(c) = 0 (set by InitCold), so seeding is always
+     ! safe regardless of whether this is a restart or cold-start run.
+     !
+     use ColumnType     , only : col_pp
+     use ColumnDataType , only : col_ef
+     use column_varcon  , only : icol_roof
+     !
+     implicit none
+     !
+     type(UrbanType)  , intent(in) :: urban
+     integer(c_int)   , intent(in) :: num_urbanl
+     integer          , intent(in) :: filter_urbanl(:)
+     integer(c_int)   , intent(in) :: num_urbanc
+     integer          , intent(in) :: filter_urbanc(:)
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c
+     real(c_double), allocatable, target  :: acFlux(:)
+
+     associate( &
+         eflx_urban_ac => col_ef%eflx_urban_ac &
+         )
+
+       allocate(acFlux(num_urbanl))
+       acFlux = 0._c_double
+
+       ! One roof column per landunit; iterate urban columns to find them
+       block
+         integer :: idx
+         idx = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_roof) then
+             idx = idx + 1
+             acFlux(idx) = real(eflx_urban_ac(c), c_double)
+           end if
+         end do
+       end block
+
+       call UrbanSetEFluxForAC(urban, c_loc(acFlux), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(acFlux)
+
+     end associate
+
+     if (masterproc) then
+       write(iulog,*) 'Seeded EFluxForAC (AC heat) for all urban landunits from ELM data'
+     end if
+
+   end subroutine SetACHeatFromState
+
+   !-----------------------------------------------------------------------
    subroutine SetImperviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
      !
      ! !DESCRIPTION:
@@ -1143,6 +1273,229 @@ contains
      end associate
 
    end subroutine SetImperviousRoadSoilWater
+
+   !-----------------------------------------------------------------------
+   subroutine SetRoofAndImperviousRoadTopWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     !
+     ! !DESCRIPTION:
+     ! Seed URBANxx's TopH2OSoiLiq and TopH2OSoiIce (top layer only) for roof
+     ! and impervious road from ELM's h2osoi_liq(c,1)/h2osoi_ice(c,1).
+     ! Called once at startup/restart so that fwet in ComputeSurfaceFluxes
+     ! starts from the correct water state rather than zero.
+     !
+     use ColumnType     , only : col_pp
+     use ColumnDataType , only : col_ws
+     use column_varcon  , only : icol_roof, icol_road_imperv
+     !
+     implicit none
+     !
+     type(UrbanType)  , intent(in) :: urban
+     integer(c_int)   , intent(in) :: num_urbanl
+     integer          , intent(in) :: filter_urbanl(:)
+     integer(c_int)   , intent(in) :: num_urbanc
+     integer          , intent(in) :: filter_urbanc(:)
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c
+     real(c_double), allocatable, target  :: liqRoof(:), iceRoof(:)
+     real(c_double), allocatable, target  :: liqImperv(:), iceImperv(:)
+
+     associate( &
+         h2osoi_liq => col_ws%h2osoi_liq, &
+         h2osoi_ice => col_ws%h2osoi_ice  &
+         )
+
+       allocate(liqRoof(num_urbanl))   ; liqRoof   = 0._c_double
+       allocate(iceRoof(num_urbanl))   ; iceRoof   = 0._c_double
+       allocate(liqImperv(num_urbanl)) ; liqImperv = 0._c_double
+       allocate(iceImperv(num_urbanl)) ; iceImperv = 0._c_double
+
+       ! Pack top-layer values indexed by landunit (same order as filter_urbanl)
+       ! Each landunit has exactly one roof column and one impervious road column.
+       block
+         integer, allocatable :: roofIdx(:), impIdx(:)
+         integer :: fl, roofCount, impCount
+         allocate(roofIdx(num_urbanl)) ; roofIdx = 0
+         allocate(impIdx(num_urbanl))  ; impIdx  = 0
+         roofCount = 0
+         impCount  = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           select case (col_pp%itype(c))
+           case (icol_roof)
+             roofCount = roofCount + 1
+             liqRoof(roofCount) = real(h2osoi_liq(c, 1), c_double)
+             iceRoof(roofCount) = real(h2osoi_ice(c, 1), c_double)
+           case (icol_road_imperv)
+             impCount = impCount + 1
+             liqImperv(impCount) = real(h2osoi_liq(c, 1), c_double)
+             iceImperv(impCount) = real(h2osoi_ice(c, 1), c_double)
+           end select
+         end do
+         deallocate(roofIdx, impIdx)
+       end block
+
+       call UrbanSetTopH2OSoiLiqRoof(urban, c_loc(liqRoof), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTopH2OSoiIceRoof(urban, c_loc(iceRoof), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTopH2OSoiLiqImperviousRoad(urban, c_loc(liqImperv), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetTopH2OSoiIceImperviousRoad(urban, c_loc(iceImperv), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(liqRoof, iceRoof, liqImperv, iceImperv)
+
+     end associate
+
+     if (masterproc) then
+       write(iulog,*) 'Seeded TopH2OSoiLiq/Ice for roof and impervious road from ELM data'
+     end if
+
+   end subroutine SetRoofAndImperviousRoadTopWater
+
+   !-----------------------------------------------------------------------
+   subroutine SetPerviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     !
+     ! !DESCRIPTION:
+     ! Initialize URBANxx's persistent WaterLiquid/WaterIce for pervious road
+     ! soil layers from ELM's h2osoi_liq/h2osoi_ice.  Called once at
+     ! startup/restart so that heat diffusion and hydrology use correct soil
+     ! moisture on the first timestep.
+     !
+     use elm_varpar     , only : nlevgrnd
+     use ColumnType     , only : col_pp
+     use ColumnDataType , only : col_ws
+     use column_varcon  , only : icol_road_perv
+     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
+     !
+     implicit none
+     !
+     type(UrbanType)  , intent(in) :: urban
+     integer(c_int)   , intent(in) :: num_urbanl
+     integer          , intent(in) :: filter_urbanl(:)
+     integer(c_int)   , intent(in) :: num_urbanc
+     integer          , intent(in) :: filter_urbanc(:)
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, j, idx
+     integer(c_int), dimension(2)         :: size2D
+     logical(c_bool)                      :: isLayoutLeft
+     real(c_double), allocatable, target  :: h2oLiq(:)
+     real(c_double), allocatable, target  :: h2oIce(:)
+
+     associate( &
+         h2osoi_liq => col_ws%h2osoi_liq, & ! Input: [real(r8) (:,:) ] liquid water (kg/m2)
+         h2osoi_ice => col_ws%h2osoi_ice  & ! Input: [real(r8) (:,:) ] ice lens (kg/m2)
+         )
+
+       allocate(h2oLiq(num_urbanl * nlevgrnd))
+       allocate(h2oIce(num_urbanl * nlevgrnd))
+       size2D(1) = num_urbanl
+       size2D(2) = nlevgrnd
+
+       isLayoutLeft = UrbanKokkosIsLayoutLeft()
+
+       if (isLayoutLeft) then
+         ! LayoutLeft: landunit index varies fastest
+         idx = 0
+         do j = 1, nlevgrnd
+           do fc = 1, num_urbanc
+             c = filter_urbanc(fc)
+             if (col_pp%itype(c) == icol_road_perv) then
+               idx = idx + 1
+               h2oLiq(idx) = real(h2osoi_liq(c, j), c_double)
+               h2oIce(idx) = real(h2osoi_ice(c, j), c_double)
+             end if
+           end do
+         end do
+       else
+         ! LayoutRight: layer index varies fastest
+         idx = 0
+         do fc = 1, num_urbanc
+           c = filter_urbanc(fc)
+           if (col_pp%itype(c) == icol_road_perv) then
+             do j = 1, nlevgrnd
+               idx = idx + 1
+               h2oLiq(idx) = real(h2osoi_liq(c, j), c_double)
+               h2oIce(idx) = real(h2osoi_ice(c, j), c_double)
+             end do
+           end if
+         end do
+       end if
+
+       call UrbanSetSoilLiquidWaterForPerviousRoad(urban, c_loc(h2oLiq), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetSoilIceContentForPerviousRoad(urban, c_loc(h2oIce), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(h2oLiq)
+       deallocate(h2oIce)
+
+     end associate
+
+   end subroutine SetPerviousRoadSoilWater
+
+   !-----------------------------------------------------------------------
+   subroutine SetWaterTableFromState(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
+        soilhydrology_vars)
+     !
+     ! !DESCRIPTION:
+     ! Seed URBANxx's pervious road water table depth (Zwt) and unconfined
+     ! aquifer water (Wa) from ELM's soilhydrology_vars state.  Called once at
+     ! startup/restart after UrbanSetup (which resets Zwt to 4.8 m and Wa to
+     ! default), so that URBANxx hydrology is consistent with ELM on the first
+     ! post-restart timestep.
+     !
+     use ColumnType        , only : col_pp
+     use column_varcon     , only : icol_road_perv
+     use SoilHydrologyType , only : soilhydrology_type
+     !
+     implicit none
+     !
+     type(UrbanType)         , intent(in) :: urban
+     integer(c_int)          , intent(in) :: num_urbanl
+     integer                 , intent(in) :: filter_urbanl(:)
+     integer(c_int)          , intent(in) :: num_urbanc
+     integer                 , intent(in) :: filter_urbanc(:)
+     type(soilhydrology_type), intent(in) :: soilhydrology_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, idx
+     real(c_double), allocatable, target  :: zwt_buf(:)
+     real(c_double), allocatable, target  :: wa_buf(:)
+
+     associate( &
+         zwt_col => soilhydrology_vars%zwt_col , &  ! water table depth (m)
+         wa_col  => soilhydrology_vars%wa_col    &  ! water in unconfined aquifer (mm)
+         )
+
+       allocate(zwt_buf(num_urbanl))
+       allocate(wa_buf(num_urbanl))
+       zwt_buf = 0._c_double
+       wa_buf  = 0._c_double
+
+       idx = 0
+       do fc = 1, num_urbanc
+         c = filter_urbanc(fc)
+         if (col_pp%itype(c) == icol_road_perv) then
+           idx = idx + 1
+           zwt_buf(idx) = real(zwt_col(c), c_double)
+           wa_buf(idx)  = real(wa_col(c),  c_double)
+         end if
+       end do
+
+       call UrbanSetWaterTableDepth(urban, c_loc(zwt_buf), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetAquiferWaterForPerviousRoad(urban, c_loc(wa_buf), num_urbanl, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(zwt_buf)
+       deallocate(wa_buf)
+
+     end associate
+
+   end subroutine SetWaterTableFromState
 
    !-----------------------------------------------------------------------
    subroutine SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
@@ -1362,6 +1715,8 @@ contains
      call SetBuildingTemperature(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetLayerTemperatures(urban, num_urbanl, filter_urbanl)
      call SetImperviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     call SetRoofAndImperviousRoadTopWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+     call SetPerviousRoadSoilWater(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
      call SetThermalConductivity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)

@@ -140,6 +140,16 @@ contains
      call restartvar(ncid=ncid, flag=flag, varname='taf', xtype=ncd_double, dim1name='landunit',                       &
           long_name='urban canopy air temperature', units='K',                                                         &
           interpinic_flag='interp', readvar=readvar, data=this%taf)
+     ! T_BUILDING restart support (B3 step 1):
+     ! DISABLED until all existing restart files have been regenerated with this variable.
+     ! ELM's restartvar aborts (shr_sys_abort) if a restart-flagged variable is missing from
+     ! an existing restart file.  Migration procedure:
+     !   1. Run a fresh cold start to produce a new restart file that includes T_BUILDING.
+     !   2. Uncomment the call below.
+     !   3. CONTINUE runs from that point will seed UrbanSetBuildingTemperatureFromState correctly.
+     ! call restartvar(ncid=ncid, flag=flag, varname='T_BUILDING', xtype=ncd_double, dim1name='landunit',                &
+     !      long_name='urban internal building temperature', units='K',                                                  &
+     !      interpinic_flag='interp', readvar=readvar, data=this%t_building)
      end subroutine lun_es_restart
 
   !------------------------------------------------------------------------
