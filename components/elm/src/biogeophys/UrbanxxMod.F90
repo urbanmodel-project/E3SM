@@ -114,6 +114,18 @@ contains
     ! the HVAC boundary condition is correct on the first post-restart timestep.
     call SetBuildingTemperatureFromState(urbanxx, num_urbanl, filter_urbanl)
 
+    ! Seed AbsorbedShortRad (absRoof, absImpRoad, absPerRoad, absSunWall,
+    ! absShadWall) from the ELM restart state.  These views are used by
+    ! UrbanComputeNetShortwaveRadiation (called every timestep via
+    ! urbanxx_SetAtmosphericForcing) before UrbanComputeNetShortwave (step 5)
+    ! has had a chance to recompute them.  Without seeding they are zero on the
+    ! first post-restart timestep, causing swnet_roof = 0 and a large top-BC
+    ! error in the roof heat diffusion.
+    call SetShortwaveAlbedo(urbanxx, num_urbanl, filter_urbanl, solarabs_vars)
+    if (masterproc) then
+       write(iulog,*) 'Re-seeded shortwave albedo (AbsorbedShortRad) from ELM solarabs_vars restart data'
+    end if
+
     ! Seed EFluxForAC (previous-timestep AC heat) from ELM's eflx_urban_ac so
     ! that the road boundary condition in UrbanComputeHeatDiffusion is correct
     ! on the first post-restart timestep.  On cold start eflx_urban_ac = 0.
@@ -1131,6 +1143,141 @@ contains
      deallocate(tBuilding)
 
    end subroutine SetBuildingTemperatureFromState
+
+   !-----------------------------------------------------------------------
+   subroutine SetShortwaveAlbedo(urban, num_urbanl, filter_urbanl, solarabs_vars)
+     !
+     ! !DESCRIPTION:
+     ! Seed URBANxx's AbsorbedShortRad views (absRoof, absImpRoad, absPerRoad,
+     ! absSunWall, absShadWall) from ELM's sabs_*_dir_lun / sabs_*_dif_lun.
+     ! Despite the ELM variable names, these quantities are shortwave albedos
+     ! (absorbed radiation per unit incoming radiation), not absolute fluxes.
+     ! Called once during urbanxx_initialize so that restart runs have non-zero
+     ! absorbed shortwave fractions before UrbanComputeNetShortwave (step 5)
+     ! has run.  Without seeding, UrbanComputeNetShortwaveRadiation (called
+     ! every timestep) computes NetShortRad = abs * ForcSRad = 0 on the first
+     ! post-restart timestep, producing a large top-BC error in heat diffusion.
+     ! Indexing: itype=0 -> DIFFUSE (*_dif), itype=1 -> DIRECT (*_dir)
+     ! On cold start sabs_*_lun = 0, so seeding is always safe.
+     !
+     use elm_varcon , only : spval
+     implicit none
+     !
+     type(UrbanType)        , intent(in) :: urban
+     integer(c_int)         , intent(in) :: num_urbanl
+     integer                , intent(in) :: filter_urbanl(:) ! urban landunit filter
+     type(solarabs_type)    , intent(in) :: solarabs_vars
+     !
+     integer(c_int)                       :: status
+     integer                              :: fl, l, iband, itype, count
+     integer(c_int)                       :: totalSize3D
+     integer(c_int), dimension(3)         :: size3D
+     real(c_double) , allocatable, target :: absRoof(:)
+     real(c_double) , allocatable, target :: absImpRoad(:)
+     real(c_double) , allocatable, target :: absPerRoad(:)
+     real(c_double) , allocatable, target :: absSunWall(:)
+     real(c_double) , allocatable, target :: absShadWall(:)
+
+     associate(                                                              &
+          sabs_roof_dir      => solarabs_vars%sabs_roof_dir_lun          , & ! Input: [real(r8) (:,:)]
+          sabs_roof_dif      => solarabs_vars%sabs_roof_dif_lun          , & ! Input: [real(r8) (:,:)]
+          sabs_improad_dir   => solarabs_vars%sabs_improad_dir_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_improad_dif   => solarabs_vars%sabs_improad_dif_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_perroad_dir   => solarabs_vars%sabs_perroad_dir_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_perroad_dif   => solarabs_vars%sabs_perroad_dif_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_sunwall_dir   => solarabs_vars%sabs_sunwall_dir_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_sunwall_dif   => solarabs_vars%sabs_sunwall_dif_lun       , & ! Input: [real(r8) (:,:)]
+          sabs_shadewall_dir => solarabs_vars%sabs_shadewall_dir_lun     , & ! Input: [real(r8) (:,:)]
+          sabs_shadewall_dif => solarabs_vars%sabs_shadewall_dif_lun       & ! Input: [real(r8) (:,:)]
+          )
+
+       size3D = [num_urbanl, numBands, numTypes]
+       totalSize3D = num_urbanl * numBands * numTypes
+
+       allocate(absRoof(totalSize3D))
+       allocate(absImpRoad(totalSize3D))
+       allocate(absPerRoad(totalSize3D))
+       allocate(absSunWall(totalSize3D))
+       allocate(absShadWall(totalSize3D))
+
+       if (UrbanKokkosIsLayoutLeft()) then
+
+          ! Kokkos layout left: 'l'-index incremented fastest
+          count = 0
+          do itype = 0, 1
+             do iband = 0, numBands - 1
+                do fl = 1, num_urbanl
+                   l = filter_urbanl(fl)
+                   count = count + 1
+                   if (itype == 0) then
+                      ! itype = 0: diffuse
+                      absRoof(count)    = real(sabs_roof_dif(l, iband+1),      c_double)
+                      absImpRoad(count) = real(sabs_improad_dif(l, iband+1),   c_double)
+                      absPerRoad(count) = real(sabs_perroad_dif(l, iband+1),   c_double)
+                      absSunWall(count) = real(sabs_sunwall_dif(l, iband+1),   c_double)
+                      absShadWall(count)= real(sabs_shadewall_dif(l, iband+1), c_double)
+                   else
+                      ! itype = 1: direct
+                      absRoof(count)    = real(sabs_roof_dir(l, iband+1),      c_double)
+                      absImpRoad(count) = real(sabs_improad_dir(l, iband+1),   c_double)
+                      absPerRoad(count) = real(sabs_perroad_dir(l, iband+1),   c_double)
+                      absSunWall(count) = real(sabs_sunwall_dir(l, iband+1),   c_double)
+                      absShadWall(count)= real(sabs_shadewall_dir(l, iband+1), c_double)
+                   end if
+                end do
+             end do
+          end do
+
+       else
+
+          ! Kokkos layout right: 'itype'-index incremented fastest
+          count = 0
+          do fl = 1, num_urbanl
+             l = filter_urbanl(fl)
+             do iband = 0, numBands - 1
+                do itype = 0, 1
+                   count = count + 1
+                   if (itype == 0) then
+                      ! itype = 0: diffuse
+                      absRoof(count)    = real(sabs_roof_dif(l, iband+1),      c_double)
+                      absImpRoad(count) = real(sabs_improad_dif(l, iband+1),   c_double)
+                      absPerRoad(count) = real(sabs_perroad_dif(l, iband+1),   c_double)
+                      absSunWall(count) = real(sabs_sunwall_dif(l, iband+1),   c_double)
+                      absShadWall(count)= real(sabs_shadewall_dif(l, iband+1), c_double)
+                   else
+                      ! itype = 1: direct
+                      absRoof(count)    = real(sabs_roof_dir(l, iband+1),      c_double)
+                      absImpRoad(count) = real(sabs_improad_dir(l, iband+1),   c_double)
+                      absPerRoad(count) = real(sabs_perroad_dir(l, iband+1),   c_double)
+                      absSunWall(count) = real(sabs_sunwall_dir(l, iband+1),   c_double)
+                      absShadWall(count)= real(sabs_shadewall_dir(l, iband+1), c_double)
+                   end if
+                end do
+             end do
+          end do
+
+       end if
+
+       call UrbanSetAbsorbedShortRadRoof(urban, c_loc(absRoof), size3D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetAbsorbedShortRadImperviousRoad(urban, c_loc(absImpRoad), size3D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetAbsorbedShortRadPerviousRoad(urban, c_loc(absPerRoad), size3D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetAbsorbedShortRadSunlitWall(urban, c_loc(absSunWall), size3D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetAbsorbedShortRadShadedWall(urban, c_loc(absShadWall), size3D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+       deallocate(absRoof)
+       deallocate(absImpRoad)
+       deallocate(absPerRoad)
+       deallocate(absSunWall)
+       deallocate(absShadWall)
+
+     end associate
+
+   end subroutine SetShortwaveAlbedo
 
    !-----------------------------------------------------------------------
    subroutine SetACHeatFromState(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
