@@ -30,6 +30,7 @@ module UrbanxxSoilWaterMod
   public :: urbanxx_soilWater
   public :: urbanxx_soilWater_check
 
+
 contains
 
   !-----------------------------------------------------------------------
@@ -62,8 +63,11 @@ contains
     !
     ! !DESCRIPTION:
     ! Compute soil hydrology for urban pervious road columns.
+    ! Root-fraction-weighted transpiration is computed internally in URBANxx
+    ! using Rootr (seeded at initialization from ELM's rootr_col) and
+    ! QflxTranEvap (computed each timestep by UrbanComputeSurfaceFluxes).
     !
-    use elm_varpar, only : nlevgrnd
+    use elm_varpar   , only : nlevgrnd
     !
     implicit none
     !
@@ -108,6 +112,7 @@ contains
     use column_varcon  , only : icol_road_perv
     use elm_varpar     , only : nlevgrnd
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
+    use elm_time_manager       , only : get_nstep
     !
     implicit none
     !
@@ -120,7 +125,9 @@ contains
     real(c_double), allocatable, target :: h2osoi_liq_2d(:,:)
     real(c_double), allocatable, target :: h2osoi_vol_2d(:,:)
     integer  :: fc, c, j, l, count, idx_perv
+    integer  :: max_err_c, max_err_j, max_err_idx_perv
     real(r8) :: max_error_liq, max_error_vol, max_rel_error_liq
+    real(r8) :: diff, max_err_elm, max_err_uxx
 
     associate( &
          h2osoi_liq => col_ws%h2osoi_liq , &
@@ -154,23 +161,43 @@ contains
       max_error_liq     = 0._r8
       max_error_vol     = 0._r8
       max_rel_error_liq = 0._r8
+      max_err_c         = -1
+      max_err_j         = -1
+      max_err_idx_perv  = -1
+      max_err_elm       = 0._r8
+      max_err_uxx       = 0._r8
       idx_perv = 0
 
       do fc = 1, num_urbanc
         c = filter_urbanc(fc)
         if (col_pp%itype(c) == icol_road_perv) then
           idx_perv = idx_perv + 1
-          do j = 1, 10!nlevgrnd
-            max_error_liq     = max(max_error_liq,     abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)))
-            max_rel_error_liq = max(max_rel_error_liq, abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j)) / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
+          do j = 1, nlevgrnd
+            diff              = abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j))
+            max_rel_error_liq = max(max_rel_error_liq, diff / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
             max_error_vol     = max(max_error_vol,     abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
+            if (diff > max_error_liq) then
+              max_error_liq    = diff
+              max_err_c        = c
+              max_err_j        = j
+              max_err_idx_perv = idx_perv
+              max_err_elm      = h2osoi_liq(c,j)
+              max_err_uxx      = h2osoi_liq_2d(idx_perv,j)
+            end if
           end do
         end if
       end do
 
-      write(iulog,*) 'Max error in soil water (h2osoi_liq): ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
+      write(iulog,'(A,I6,A,ES12.4,A,ES12.4,A)') 'Max error in soil water (h2osoi_liq) step=', get_nstep(), &
+           ': ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
       if (max_error_liq > 1.0e-6_r8) then
         write(iulog,*) 'ERROR: Max soil liquid water error exceeds threshold!'
+        write(iulog,*) '  ELM column c          :', max_err_c
+        write(iulog,*) '  URBANxx idx_perv      :', max_err_idx_perv
+        write(iulog,*) '  Layer j               :', max_err_j
+        write(iulog,*) '  ELM    h2osoi_liq(c,j):', max_err_elm
+        write(iulog,*) '  URBANxx h2osoi_liq    :', max_err_uxx
+        write(iulog,*) '  Abs difference        :', max_error_liq
         call exit(0)
       end if
 

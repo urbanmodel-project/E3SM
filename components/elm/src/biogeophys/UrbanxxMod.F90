@@ -797,6 +797,8 @@ contains
      integer(c_int), dimension(2)         :: size2D
      logical(c_bool)                      :: isLayoutLeft
      real(c_double), allocatable, target  :: watsat(:)
+     real(c_double), allocatable, target  :: watdry(:)
+     real(c_double), allocatable, target  :: watopt(:)
      real(c_double), allocatable, target  :: bsw(:)
      real(c_double), allocatable, target  :: sucsat(:)
      real(c_double), allocatable, target  :: hksat(:)
@@ -807,6 +809,8 @@ contains
 
      associate(                                   &
           watsat_col => soilstate_vars%watsat_col, & ! Input: [real(r8) (:,:)] volumetric soil water at saturation
+          watdry_col => soilstate_vars%watdry_col, & ! Input: [real(r8) (:,:)] vol. water at wilting point (btran=0)
+          watopt_col => soilstate_vars%watopt_col, & ! Input: [real(r8) (:,:)] vol. water at field-capacity analogue (btran=1)
           bsw_col    => soilstate_vars%bsw_col   , & ! Input: [real(r8) (:,:)] Clapp-Hornberger parameter b
           sucsat_col => soilstate_vars%sucsat_col , & ! Input: [real(r8) (:,:)] minimum soil suction [mm]
           hksat_col  => soilstate_vars%hksat_col  , & ! Input: [real(r8) (:,:)] hydraulic conductivity at saturation [mm/s]
@@ -822,6 +826,8 @@ contains
        size2D(2) = nlevgrnd
 
        allocate(watsat(totalSize))
+       allocate(watdry(totalSize))
+       allocate(watopt(totalSize))
        allocate(bsw(totalSize))
        allocate(sucsat(totalSize))
        allocate(hksat(totalSize))
@@ -848,12 +854,16 @@ contains
                cvsolids(idx)  = csol_col(c, j)
                if (j <= nlevbed) then
                  watsat(idx)    = watsat_col(c, j)
+                 watdry(idx)    = watdry_col(c, j)
+                 watopt(idx)    = watopt_col(c, j)
                  bsw(idx)       = bsw_col(c, j)
                  sucsat(idx)    = sucsat_col(c, j)
                  hksat(idx)     = hksat_col(c, j)
                else
                  ! Below bedrock: duplicate last active layer
                  watsat(idx)    = watsat_col(c, nlevbed)
+                 watdry(idx)    = watdry_col(c, nlevbed)
+                 watopt(idx)    = watopt_col(c, nlevbed)
                  bsw(idx)       = bsw_col(c, nlevbed)
                  sucsat(idx)    = sucsat_col(c, nlevbed)
                  hksat(idx)     = hksat_col(c, nlevbed)
@@ -877,12 +887,16 @@ contains
                cvsolids(idx)  = csol_col(c, j)
                if (j <= nlevbed) then
                  watsat(idx)    = watsat_col(c, j)
+                 watdry(idx)    = watdry_col(c, j)
+                 watopt(idx)    = watopt_col(c, j)
                  bsw(idx)       = bsw_col(c, j)
                  sucsat(idx)    = sucsat_col(c, j)
                  hksat(idx)     = hksat_col(c, j)
                else
                  ! Below bedrock: duplicate last active layer
                  watsat(idx)    = watsat_col(c, nlevbed)
+                 watdry(idx)    = watdry_col(c, nlevbed)
+                 watopt(idx)    = watopt_col(c, nlevbed)
                  bsw(idx)       = bsw_col(c, nlevbed)
                  sucsat(idx)    = sucsat_col(c, nlevbed)
                  hksat(idx)     = hksat_col(c, nlevbed)
@@ -893,6 +907,10 @@ contains
        end if
 
        call UrbanSetWatSatForPerviousRoad(urban, c_loc(watsat), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetWatDryForPerviousRoad(urban, c_loc(watdry), size2D, status)
+       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+       call UrbanSetWatOptForPerviousRoad(urban, c_loc(watopt), size2D, status)
        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
        call UrbanSetBswForPerviousRoad(urban, c_loc(bsw), size2D, status)
        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -910,10 +928,12 @@ contains
        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
        if (masterproc) then
-         write(iulog,*) 'Set derived soil properties for pervious road from ELM data (watsat,bsw,sucsat,hksat,tkdry,tksat,tkminerals,cvsolids)'
+         write(iulog,*) 'Set derived soil properties for pervious road from ELM data (watsat,watdry,watopt,bsw,sucsat,hksat,tkdry,tksat,tkminerals,cvsolids)'
        end if
 
        deallocate(watsat)
+       deallocate(watdry)
+       deallocate(watopt)
        deallocate(bsw)
        deallocate(sucsat)
        deallocate(hksat)
