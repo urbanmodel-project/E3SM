@@ -1229,15 +1229,15 @@ contains
                 do fl = 1, num_urbanl
                    l = filter_urbanl(fl)
                    count = count + 1
-                   if (itype == 0) then
-                      ! itype = 0: diffuse
+                   if (itype == 1) then
+                      ! itype = 1: diffuse
                       absRoof(count)    = real(sabs_roof_dif(l, iband+1),      c_double)
                       absImpRoad(count) = real(sabs_improad_dif(l, iband+1),   c_double)
                       absPerRoad(count) = real(sabs_perroad_dif(l, iband+1),   c_double)
                       absSunWall(count) = real(sabs_sunwall_dif(l, iband+1),   c_double)
                       absShadWall(count)= real(sabs_shadewall_dif(l, iband+1), c_double)
                    else
-                      ! itype = 1: direct
+                      ! itype = 0: direct
                       absRoof(count)    = real(sabs_roof_dir(l, iband+1),      c_double)
                       absImpRoad(count) = real(sabs_improad_dir(l, iband+1),   c_double)
                       absPerRoad(count) = real(sabs_perroad_dir(l, iband+1),   c_double)
@@ -1257,15 +1257,15 @@ contains
              do iband = 0, numBands - 1
                 do itype = 0, 1
                    count = count + 1
-                   if (itype == 0) then
-                      ! itype = 0: diffuse
+                   if (itype == 1) then
+                      ! itype = 1: diffuse
                       absRoof(count)    = real(sabs_roof_dif(l, iband+1),      c_double)
                       absImpRoad(count) = real(sabs_improad_dif(l, iband+1),   c_double)
                       absPerRoad(count) = real(sabs_perroad_dif(l, iband+1),   c_double)
                       absSunWall(count) = real(sabs_sunwall_dif(l, iband+1),   c_double)
                       absShadWall(count)= real(sabs_shadewall_dif(l, iband+1), c_double)
                    else
-                      ! itype = 1: direct
+                      ! itype = 0: direct
                       absRoof(count)    = real(sabs_roof_dir(l, iband+1),      c_double)
                       absImpRoad(count) = real(sabs_improad_dir(l, iband+1),   c_double)
                       absPerRoad(count) = real(sabs_perroad_dir(l, iband+1),   c_double)
