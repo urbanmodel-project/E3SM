@@ -1179,7 +1179,7 @@ contains
     use ExternalModelInterfaceMod, only : EMI_Init_EM
     use ExternalModelConstants   , only : EM_ID_VSFM
     use ExternalModelConstants   , only : EM_ID_PTM
-    use filterMod                , only : filter_inactive_and_active
+    use filterMod                , only : filter
     use UrbanxxMod               , only : urbanxx_initialize
     use UrbanxxNetLongwaveMod    , only : urbanxx_netLongwave_init
     use UrbanxxNetShortwaveMod   , only : urbanxx_netShortwave_init
@@ -1248,30 +1248,30 @@ contains
     do nc = 1,nclumps
       call get_clump_bounds(nc, bounds_clump)
       call urbanxx_initialize(bounds_clump, &
-                  filter_inactive_and_active(nc)%num_urbanl, &
-                  filter_inactive_and_active(nc)%urbanl,     &
-                  filter_inactive_and_active(nc)%num_urbanc, &
-                  filter_inactive_and_active(nc)%urbanc,     &
-                  filter_inactive_and_active(nc)%num_urbanp, &
-                  filter_inactive_and_active(nc)%urbanp,     &
+                  filter(nc)%num_urbanl, &
+                  filter(nc)%urbanl,     &
+                  filter(nc)%num_urbanc, &
+                  filter(nc)%urbanc,     &
+                  filter(nc)%num_urbanp, &
+                  filter(nc)%urbanp,     &
                   urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
                   soilstate_vars, soilhydrology_vars)
 
       ! Allocate persistent buffers for physics modules
-      call urbanxx_netLongwave_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_netShortwave_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_surfaceFluxes_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_soilTemperature_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_soilWater_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_soilFluxes_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_SetAtmosphericForcing_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_surfaceRunoff_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_infiltration_init(filter_inactive_and_active(nc)%num_urbanl)
-      call urbanxx_waterTable_init(filter_inactive_and_active(nc)%num_urbanl,  &
-                                   filter_inactive_and_active(nc)%num_urbanc,  &
-                                   filter_inactive_and_active(nc)%urbanc,      &
+      call urbanxx_netLongwave_init(filter(nc)%num_urbanl)
+      call urbanxx_netShortwave_init(filter(nc)%num_urbanl)
+      call urbanxx_surfaceFluxes_init(filter(nc)%num_urbanl)
+      call urbanxx_soilTemperature_init(filter(nc)%num_urbanl)
+      call urbanxx_soilWater_init(filter(nc)%num_urbanl)
+      call urbanxx_soilFluxes_init(filter(nc)%num_urbanl)
+      call urbanxx_SetAtmosphericForcing_init(filter(nc)%num_urbanl)
+      call urbanxx_surfaceRunoff_init(filter(nc)%num_urbanl)
+      call urbanxx_infiltration_init(filter(nc)%num_urbanl)
+      call urbanxx_waterTable_init(filter(nc)%num_urbanl,  &
+                                   filter(nc)%num_urbanc,  &
+                                   filter(nc)%urbanc,      &
                                    soilhydrology_vars)
-      call urbanxx_drainage_init(filter_inactive_and_active(nc)%num_urbanl)
+      call urbanxx_drainage_init(filter(nc)%num_urbanl)
     end do
 
     call t_stopf('elm_init3')
