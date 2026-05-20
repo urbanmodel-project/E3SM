@@ -82,6 +82,7 @@ contains
                                           urbanxx_dewCondensation, urbanxx_dewCondensation_check
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use elm_varctl           , only : use_vsfm
+    use elm_varctl           , only : use_urbanxx
     use SoilHydrologyMod     , only : DrainageVSFM
     use SoilWaterMovementMod , only : Compute_EffecRootFrac_And_VertTranSink
     !
@@ -199,9 +200,11 @@ contains
 
       call SurfaceRunoff(bounds, num_hydrologyc, filter_hydrologyc, num_urbanc, filter_urbanc, &
            soilhydrology_vars, soilstate_vars, dtime)
-      call urbanxx_surfaceRunoff(num_urbanl, num_urbanc, filter_urbanc, &
-           soilhydrology_vars, soilstate_vars, dtime)
-      call urbanxx_surfaceRunoff_check(num_urbanl, num_urbanc, filter_urbanc)
+      if (use_urbanxx) then
+         call urbanxx_surfaceRunoff(num_urbanl, num_urbanc, filter_urbanc, &
+              soilhydrology_vars, soilstate_vars, dtime)
+         call urbanxx_surfaceRunoff_check(num_urbanl, num_urbanc, filter_urbanc)
+      end if
 
       !------------------------------------------------------------------------------------
       if (use_pflotran .and. pf_hmode) then
@@ -209,8 +212,10 @@ contains
         call Infiltration(bounds, num_hydrononsoic, filter_hydrononsoic,          &
              num_urbanc, filter_urbanc, atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, &
              energyflux_vars, soilhydrology_vars, soilstate_vars, dtime)
-        call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
-        call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
+        if (use_urbanxx) then
+           call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
+           call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
+        end if
 
       else
       !------------------------------------------------------------------------------------
@@ -218,8 +223,10 @@ contains
         call Infiltration(bounds, num_hydrologyc, filter_hydrologyc,              &
              num_urbanc, filter_urbanc, atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, &
              energyflux_vars, soilhydrology_vars, soilstate_vars, dtime)
-        call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
-        call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
+        if (use_urbanxx) then
+           call urbanxx_infiltration(num_urbanl, num_urbanc, filter_urbanc)
+           call urbanxx_infiltration_check(num_urbanl, num_urbanc, filter_urbanc)
+        end if
 
       !------------------------------------------------------------------------------------
       end if
@@ -293,9 +300,11 @@ contains
 
       !------------------------------------------------------------------------------------
       ! URBANxx WaterTable runs first (before ELM modifies wa_col / h2osoi)
-      call urbanxx_waterTable(num_urbanl, num_urbanc, filter_urbanc, &
-           soilhydrology_vars, dtime)
-      call urbanxx_dewCondensation(num_urbanl, dtime)
+      if (use_urbanxx) then
+         call urbanxx_waterTable(num_urbanl, num_urbanc, filter_urbanc, &
+              soilhydrology_vars, dtime)
+         call urbanxx_dewCondensation(num_urbanl, dtime)
+      end if
 
       if (use_pflotran .and. pf_hmode) then
 
@@ -313,9 +322,11 @@ contains
       end if
       !------------------------------------------------------------------------------------
 
-      call urbanxx_waterTable_check(num_urbanl, num_urbanc, filter_urbanc, &
-           soilhydrology_vars)
-      call urbanxx_dewCondensation_check(num_urbanl, num_urbanc, filter_urbanc)
+      if (use_urbanxx) then
+         call urbanxx_waterTable_check(num_urbanl, num_urbanc, filter_urbanc, &
+              soilhydrology_vars)
+         call urbanxx_dewCondensation_check(num_urbanl, num_urbanc, filter_urbanc)
+      end if
 
 
 #ifndef _OPENACC

@@ -2120,6 +2120,15 @@ Runtime flag to turn on/off PETSc based thermal model.
 </entry>
 
 <!-- ========================================================================================  -->
+<!-- Namelist options related to URBANxx                                                       -->
+<!-- ========================================================================================  -->
+
+<entry id="use_urbanxx" type="logical" category="default_settings"
+        group="elm_inparm" valid_values="">
+Runtime flag to turn on/off URBANxx.
+</entry>
+
+<!-- ========================================================================================  -->
 <!-- Namelist options for variable soil thickness                                              -->
 <!-- ========================================================================================  -->
 

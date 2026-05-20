@@ -17,6 +17,7 @@ module SoilWaterMovementMod
   use elm_instMod , only : waterflux_vars, waterstate_vars, temperature_vars
   use abortutils           , only : endrun
   use UrbanxxSoilWaterMod          , only : urbanxx_soilWater, urbanxx_soilWater_check
+  use elm_varctl           , only : use_urbanxx
 
   !
   implicit none
@@ -133,7 +134,7 @@ contains
 
     case (zengdecker_2009)
 
-       call urbanxx_soilWater(num_urbanl, dt)
+       if (use_urbanxx) call urbanxx_soilWater(num_urbanl, dt)
 
        call soilwater_zengdecker2009(bounds, num_hydrologyc, filter_hydrologyc, &
             num_urbanc, filter_urbanc, soilhydrology_vars, soilstate_vars, dt)
@@ -202,7 +203,7 @@ contains
     endif
 
     ! call check for Urbanxx soil water variables
-    call urbanxx_soilWater_check(num_urbanl, num_urbanc, filter_urbanc)
+    if (use_urbanxx) call urbanxx_soilWater_check(num_urbanl, num_urbanc, filter_urbanc)
 
   end associate
 

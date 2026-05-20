@@ -1168,6 +1168,7 @@ contains
     use elm_varctl               , only : use_petsc_thermal_model
     use elm_varctl               , only : lateral_connectivity
     use elm_varctl               , only : finidat
+    use elm_varctl               , only : use_urbanxx
     use decompMod                , only : get_proc_clumps
     use mpp_varpar               , only : mpp_varpar_init
     use mpp_varcon               , only : mpp_varcon_init_landunit
@@ -1245,34 +1246,36 @@ contains
     endif
 
     nclumps = get_proc_clumps()
-    do nc = 1,nclumps
-      call get_clump_bounds(nc, bounds_clump)
-      call urbanxx_initialize(bounds_clump, &
-                  filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl,     &
-                  filter(nc)%num_urbanc, &
-                  filter(nc)%urbanc,     &
-                  filter(nc)%num_urbanp, &
-                  filter(nc)%urbanp,     &
-                  urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
-                  soilstate_vars, soilhydrology_vars)
+    if (use_urbanxx) then
+      do nc = 1,nclumps
+        call get_clump_bounds(nc, bounds_clump)
+        call urbanxx_initialize(bounds_clump, &
+                    filter(nc)%num_urbanl, &
+                    filter(nc)%urbanl,     &
+                    filter(nc)%num_urbanc, &
+                    filter(nc)%urbanc,     &
+                    filter(nc)%num_urbanp, &
+                    filter(nc)%urbanp,     &
+                    urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
+                    soilstate_vars, soilhydrology_vars)
 
-      ! Allocate persistent buffers for physics modules
-      call urbanxx_netLongwave_init(filter(nc)%num_urbanl)
-      call urbanxx_netShortwave_init(filter(nc)%num_urbanl)
-      call urbanxx_surfaceFluxes_init(filter(nc)%num_urbanl)
-      call urbanxx_soilTemperature_init(filter(nc)%num_urbanl)
-      call urbanxx_soilWater_init(filter(nc)%num_urbanl)
-      call urbanxx_soilFluxes_init(filter(nc)%num_urbanl)
-      call urbanxx_SetAtmosphericForcing_init(filter(nc)%num_urbanl)
-      call urbanxx_surfaceRunoff_init(filter(nc)%num_urbanl)
-      call urbanxx_infiltration_init(filter(nc)%num_urbanl)
-      call urbanxx_waterTable_init(filter(nc)%num_urbanl,  &
-                                   filter(nc)%num_urbanc,  &
-                                   filter(nc)%urbanc,      &
-                                   soilhydrology_vars)
-      call urbanxx_drainage_init(filter(nc)%num_urbanl)
-    end do
+        ! Allocate persistent buffers for physics modules
+        call urbanxx_netLongwave_init(filter(nc)%num_urbanl)
+        call urbanxx_netShortwave_init(filter(nc)%num_urbanl)
+        call urbanxx_surfaceFluxes_init(filter(nc)%num_urbanl)
+        call urbanxx_soilTemperature_init(filter(nc)%num_urbanl)
+        call urbanxx_soilWater_init(filter(nc)%num_urbanl)
+        call urbanxx_soilFluxes_init(filter(nc)%num_urbanl)
+        call urbanxx_SetAtmosphericForcing_init(filter(nc)%num_urbanl)
+        call urbanxx_surfaceRunoff_init(filter(nc)%num_urbanl)
+        call urbanxx_infiltration_init(filter(nc)%num_urbanl)
+        call urbanxx_waterTable_init(filter(nc)%num_urbanl,  &
+                                     filter(nc)%num_urbanc,  &
+                                     filter(nc)%urbanc,      &
+                                     soilhydrology_vars)
+        call urbanxx_drainage_init(filter(nc)%num_urbanl)
+      end do
+    end if
 
     call t_stopf('elm_init3')
 

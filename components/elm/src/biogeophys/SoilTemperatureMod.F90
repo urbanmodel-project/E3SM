@@ -182,6 +182,7 @@ contains
     use landunit_varcon          , only : istwet, istice, istice_mec, istsoil, istcrop
     use BandDiagonalMod          , only : BandDiagonal
     use UrbanxxSoilTemperatureMod , only : urbanxx_soilTemperature, urbanxx_soilTemperature_check
+    use elm_varctl               , only : use_urbanxx
 
     !
     ! !ARGUMENTS:
@@ -508,8 +509,10 @@ contains
       !
       ! Solve temperature for lake + urban column
       !
-      call urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
-           filter_nolakec_and_urbanc, temperature_vars)
+      if (use_urbanxx) then
+         call urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, temperature_vars)
+      end if
 
       urban_column = .true.
       call SolveTemperature(bounds,                &
@@ -570,8 +573,10 @@ contains
 
       enddo
 
-      call urbanxx_soilTemperature_check(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
-           filter_nolakec_and_urbanc, temperature_vars)
+      if (use_urbanxx) then
+         call urbanxx_soilTemperature_check(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, temperature_vars)
+      end if
 
       ! Melting or Freezing
 

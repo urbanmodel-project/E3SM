@@ -60,6 +60,7 @@ contains
     use elm_varpar       , only : nlevgrnd, nlevurb, nlevsoi
     use SoilHydrologyMod , only : ELMVICMap, Drainage
     use elm_varctl       , only : use_vsfm, use_IM2_hillslope_hydrology
+    use elm_varctl       , only : use_urbanxx
     use UrbanxxDrainageMod, only : urbanxx_drainage, urbanxx_drainage_check
     !
     ! !ARGUMENTS:
@@ -152,8 +153,10 @@ contains
          call Drainage(bounds, num_hydrologyc, filter_hydrologyc, &
               num_urbanc, filter_urbanc,&
               soilhydrology_vars, soilstate_vars, ocn2lnd_vars, dtime)
-         call urbanxx_drainage(dtime)
-         call urbanxx_drainage_check(num_urbanc, filter_urbanc)
+         if (use_urbanxx) then
+            call urbanxx_drainage(dtime)
+            call urbanxx_drainage_check(num_urbanc, filter_urbanc)
+         end if
       endif
 
 #ifndef _OPENACC

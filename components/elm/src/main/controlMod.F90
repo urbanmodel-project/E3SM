@@ -316,6 +316,8 @@ contains
 
     namelist /elm_inparm/ use_var_soil_thick, use_lake_wat_storage
 
+    namelist /elm_inparm/ use_urbanxx
+
     namelist /elm_inparm/ &
          use_vsfm, vsfm_satfunc_type, vsfm_use_dynamic_linesearch, &
          vsfm_lateral_model_type, vsfm_include_seepage_bc
@@ -991,6 +993,9 @@ contains
 
     ! plant hydraulics
     call mpi_bcast (use_hydrstress, 1, MPI_LOGICAL, 0, mpicom, ier)
+
+    ! URBANxx variable
+    call mpi_bcast (use_urbanxx, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     ! VSFM variable
 

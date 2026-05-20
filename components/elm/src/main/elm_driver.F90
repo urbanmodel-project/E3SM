@@ -183,6 +183,7 @@ module elm_driver
   use elm_varctl                  , only : do_budgets, budget_inst, budget_daily, budget_month
   use elm_varctl                  , only : budget_ann, budget_ltann, budget_ltend
   use elm_varctl                  , only : use_finetop_rad
+  use elm_varctl                  , only : use_urbanxx
 
   use timeinfoMod
   use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing
@@ -761,15 +762,17 @@ contains
             atm2lnd_vars, urbanparams_vars, &
             solarabs_vars, surfalb_vars, energyflux_vars)
 
-        call urbanxx_SetAtmosphericForcing( &
-                  filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl,     &
-                  nextsw_cday, declinp1, &
-                  surfalb_vars, urbanparams_vars, top_as)
-        call urbanxx_netLongwave( &
-                  filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl,     &
-                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+        if (use_urbanxx) then
+           call urbanxx_SetAtmosphericForcing( &
+                     filter(nc)%num_urbanl, &
+                     filter(nc)%urbanl,     &
+                     nextsw_cday, declinp1, &
+                     surfalb_vars, urbanparams_vars, top_as)
+           call urbanxx_netLongwave( &
+                     filter(nc)%num_urbanl, &
+                     filter(nc)%urbanl,     &
+                     surfalb_vars, urbanparams_vars, frictionvel_vars)
+        end if
 
        call t_stopf('surfrad')
 
@@ -825,12 +828,14 @@ contains
             atm2lnd_vars, urbanparams_vars, soilstate_vars,  &
             frictionvel_vars, energyflux_vars)
        call t_stopf('uflux')
-       call urbanxx_surfaceFluxes( &
-                  filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl,     &
-                  filter(nc)%num_urbanc, filter(nc)%urbanc,        &
-                  filter(nc)%num_urbanp, filter(nc)%urbanp,        &
-                  surfalb_vars, urbanparams_vars, frictionvel_vars)
+       if (use_urbanxx) then
+          call urbanxx_surfaceFluxes( &
+                     filter(nc)%num_urbanl, &
+                     filter(nc)%urbanl,     &
+                     filter(nc)%num_urbanc, filter(nc)%urbanc,        &
+                     filter(nc)%num_urbanp, filter(nc)%urbanp,        &
+                     surfalb_vars, urbanparams_vars, frictionvel_vars)
+       end if
 
        ! Fluxes for all lake landunits
 
@@ -911,13 +916,15 @@ contains
             energyflux_vars )
        call t_stopf('bgp2')
 
-       call urbanxx_soilFluxes( &
-            filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
-            filter(nc)%num_nolakec, filter(nc)%nolakec,    &
-            filter(nc)%num_nolakep, filter(nc)%nolakep)
-       call urbanxx_soilFluxes_check( &
-            filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
-            filter(nc)%num_nolakep, filter(nc)%nolakep)
+       if (use_urbanxx) then
+          call urbanxx_soilFluxes( &
+               filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
+               filter(nc)%num_nolakec, filter(nc)%nolakec,    &
+               filter(nc)%num_nolakep, filter(nc)%nolakep)
+          call urbanxx_soilFluxes_check( &
+               filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
+               filter(nc)%num_nolakep, filter(nc)%nolakep)
+       end if
 
        ! ============================================================================
        ! Perform averaging from patch level to column level
@@ -1436,9 +1443,11 @@ contains
                   urbanparams_vars, solarabs_vars, surfalb_vars)
              call t_stopf('urbsurfalb')
 
-             call urbanxx_netShortwave( &
-                  filter(nc)%num_urbanl, &
-                  filter(nc)%urbanl)
+             if (use_urbanxx) then
+                call urbanxx_netShortwave( &
+                     filter(nc)%num_urbanl, &
+                     filter(nc)%urbanl)
+             end if
           end if
 
        end if

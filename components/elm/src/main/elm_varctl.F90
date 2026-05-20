@@ -419,6 +419,11 @@ module elm_varctl
   logical, public :: use_arctic_init     = .false.
 
   !----------------------------------------------------------
+  ! URBANxx switches
+  !----------------------------------------------------------
+  logical          , public :: use_urbanxx                 = .false.
+
+  !----------------------------------------------------------
   ! VSFM switches
   !----------------------------------------------------------
   logical          , public :: use_vsfm                    = .false.
@@ -548,6 +553,7 @@ module elm_varctl
   !$acc declare copyin(use_noio           )
   !$acc declare copyin(use_var_soil_thick )
   !$acc declare copyin(tw_irr)
+  !$acc declare copyin(use_urbanxx                )
   !$acc declare copyin(use_vsfm                   )
   !$acc declare copyin(vsfm_use_dynamic_linesearch)
   !$acc declare copyin(vsfm_include_seepage_bc    )
