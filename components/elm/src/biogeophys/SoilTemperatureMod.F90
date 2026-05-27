@@ -642,14 +642,11 @@ contains
          xmf_h2osfc(c) = 0.
       end do
 
-      write(*,*)' Before PhaseChangeH2osfc: t_soisno(7,1) ',t_soisno(7,1)
       call PhaseChangeH2osfc (bounds, num_nolakec, filter_nolakec, &
            dhsdT(bounds%begc:bounds%endc), energyflux_vars,dtime )
 
-      write(*,*)' Before Phasechange_beta : t_soisno(7,1) ',t_soisno(7,1)
       call Phasechange_beta (bounds, num_nolakec, filter_nolakec, &
            dhsdT(bounds%begc:bounds%endc), soilstate_vars, energyflux_vars, dtime)
-      write(*,*)' After  Phasechange_beta : t_soisno(7,1) ',t_soisno(7,1)
 
       if (use_urbanxx) then
          call urbanxx_soilTemperature_check(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
@@ -676,8 +673,6 @@ contains
                t_grnd(c) = t_soisno(c,1)
             end if
          endif
-         if (c == 7) write(*,*)'>>>> snl(c) ', c, 'snl',snl(c), 'frac_h2osfc' ,frac_h2osfc(c), &
-         't_grnd', t_grnd(c), 't_soisno(c,1)', t_soisno(c,1), 't_h2osfc(c)', t_h2osfc(c)
       end do
 
       ! Initialize soil heat content
@@ -2465,7 +2460,6 @@ contains
             l = col_pp%landunit(c)
             if (lun_pp%urbpoi(l)) then
                if (col_pp%itype(c) == icol_road_imperv .or. col_pp%itype(c) == icol_road_perv) then
-                  write(*,*) 'In SetRHSVec_SnowUrbanRoad, c, j, snl(c) = ', c, j, col_pp%snl(c)
                   if (j >= col_pp%snl(c)+1) then
                      if (j == col_pp%snl(c)+1) then
                         dzp     = z(c,j+1)-z(c,j)
