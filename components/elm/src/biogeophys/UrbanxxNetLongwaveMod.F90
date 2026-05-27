@@ -47,6 +47,33 @@ module UrbanxxNetLongwaveMod
 contains
 
   !-----------------------------------------------------------------------
+  subroutine update_max_error_tracker(elm_val, urb_val, p, c, max_error, max_rel_error, &
+       p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+    implicit none
+    real(r8), intent(in)    :: elm_val, urb_val
+    integer , intent(in)    :: p, c
+    real(r8), intent(inout) :: max_error, max_rel_error
+    integer , intent(inout) :: p_max_error, c_max_error
+    integer , intent(inout) :: p_max_rel_error, c_max_rel_error
+    real(r8)                :: abs_err, rel_err
+
+    abs_err = abs(elm_val - urb_val)
+    rel_err = abs_err / max(abs(elm_val), 1.0e-20_r8)
+
+    if (abs_err > max_error) then
+       max_error = abs_err
+       p_max_error = p
+       c_max_error = c
+    end if
+
+    if (rel_err > max_rel_error) then
+       max_rel_error = rel_err
+       p_max_rel_error = p
+       c_max_rel_error = c
+    end if
+  end subroutine update_max_error_tracker
+
+  !-----------------------------------------------------------------------
   subroutine urbanxx_netLongwave_init(num_urbanl)
     !
     ! !DESCRIPTION:
@@ -94,13 +121,14 @@ contains
     !
     integer                              :: fl, l, c_start, c_end, c, p, p_start, p_end
     integer(c_int)                       :: status
-    real(r8)                             :: max_error, max_rel_error
+   real(r8)                             :: max_error, max_rel_error
+   integer                              :: p_max_error, c_max_error, p_max_rel_error, c_max_rel_error
 
     associate(                       &
-         ctype  =>    col_pp%itype , & ! Input:  [integer (:)    ]  column type
-         coli   =>    lun_pp%coli  , & ! Input:  [integer (:)    ]  beginning column index for landunit
-         colf   =>    lun_pp%colf  , & ! Input:  [integer (:)    ]  ending column index for landunit
-         t_grnd =>    col_es%t_grnd  & ! Input:  [real(r8) (:)   ]  ground temperature (K)
+         ctype    =>    col_pp%itype  , & ! Input:  [integer (:)    ]  column type
+         coli     =>    lun_pp%coli   , & ! Input:  [integer (:)    ]  beginning column index for landunit
+         colf     =>    lun_pp%colf   , & ! Input:  [integer (:)    ]  ending column index for landunit
+         t_grnd   =>    col_es%t_grnd & ! Input:  [real(r8) (:)   ]  ground temperature (K)
          )
 
       ! Extract surface temperatures from columns to landunits
@@ -128,6 +156,9 @@ contains
             end select
          end do
       end do
+
+      call UrbanComputeSnowCover(urbanxx, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       call UrbanComputeNetLongwave(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -157,8 +188,12 @@ contains
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
       ! Scatter results back to ELM patch-indexed variables
-      max_error     = 0._r8
-      max_rel_error = 0._r8
+      max_error       = 0._r8
+      max_rel_error   = 0._r8
+      p_max_error     = -1
+      c_max_error     = -1
+      p_max_rel_error = -1
+      c_max_rel_error = -1
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
          p_start = lun_pp%pfti(l)
@@ -168,44 +203,31 @@ contains
             c = veg_pp%column(p)
             select case (ctype(c))
             case (icol_roof)
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_out(p)  - lwup_roof(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_out(p)  - lwup_roof(fl))   / max(abs(veg_ef%eflx_lwrad_out(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net(p)  - lwnet_roof(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net(p)  - lwnet_roof(fl))  / max(abs(veg_ef%eflx_lwrad_net(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_roof(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_roof(fl))  / max(abs(veg_ef%eflx_lwrad_net_u(p)), 1.0e-20_r8))
+               call update_max_error_tracker(veg_ef%eflx_lwrad_out(p),   lwup_roof(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_roof(fl), p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_roof(fl), p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             case (icol_sunwall)
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_out(p)  - lwup_sunwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_out(p)  - lwup_sunwall(fl))  / max(abs(veg_ef%eflx_lwrad_out(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net(p)  - lwnet_sunwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net(p)  - lwnet_sunwall(fl)) / max(abs(veg_ef%eflx_lwrad_net(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_sunwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_sunwall(fl)) / max(abs(veg_ef%eflx_lwrad_net_u(p)), 1.0e-20_r8))
+               call update_max_error_tracker(veg_ef%eflx_lwrad_out(p),   lwup_sunwall(fl),   p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_sunwall(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_sunwall(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             case (icol_shadewall)
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_out(p)  - lwup_shadwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_out(p)  - lwup_shadwall(fl))  / max(abs(veg_ef%eflx_lwrad_out(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net(p)  - lwnet_shadwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net(p)  - lwnet_shadwall(fl)) / max(abs(veg_ef%eflx_lwrad_net(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_shadwall(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_shadwall(fl)) / max(abs(veg_ef%eflx_lwrad_net_u(p)), 1.0e-20_r8))
+               call update_max_error_tracker(veg_ef%eflx_lwrad_out(p),   lwup_shadwall(fl),   p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_shadwall(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_shadwall(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             case (icol_road_perv)
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_out(p)  - lwup_perroad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_out(p)  - lwup_perroad(fl))   / max(abs(veg_ef%eflx_lwrad_out(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net(p)  - lwnet_perroad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net(p)  - lwnet_perroad(fl))  / max(abs(veg_ef%eflx_lwrad_net(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_perroad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_perroad(fl))  / max(abs(veg_ef%eflx_lwrad_net_u(p)), 1.0e-20_r8))
+               call update_max_error_tracker(veg_ef%eflx_lwrad_out(p),   lwup_perroad(fl),   p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_perroad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_perroad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             case (icol_road_imperv)
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_out(p)  - lwup_improad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_out(p)  - lwup_improad(fl))   / max(abs(veg_ef%eflx_lwrad_out(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net(p)  - lwnet_improad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net(p)  - lwnet_improad(fl))  / max(abs(veg_ef%eflx_lwrad_net(p)),   1.0e-20_r8))
-               max_error     = max(max_error,     abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_improad(fl)))
-               max_rel_error = max(max_rel_error, abs(veg_ef%eflx_lwrad_net_u(p)- lwnet_improad(fl))  / max(abs(veg_ef%eflx_lwrad_net_u(p)), 1.0e-20_r8))
+               call update_max_error_tracker(veg_ef%eflx_lwrad_out(p),   lwup_improad(fl),   p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_improad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
+               call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_improad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             end select
          end do
       end do
       write(iulog,*) 'Max error in longwave fluxes        : ', max_error, ' (rel: ', max_rel_error, ')'
+          write(iulog,*) 'Max abs error location              : p=', p_max_error, ' c=', c_max_error,'column type=', ctype(c_max_error)
+          write(iulog,*) 'Max rel error location              : p=', p_max_rel_error, ' c=', c_max_rel_error,'column type=', ctype(c_max_rel_error)
       if (max_error > 1.0e-10) then
          write(iulog,*) 'Error exceeds tolerance! Check Urban++ net longwave computation.'
          call exit(0)
