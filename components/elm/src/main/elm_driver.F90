@@ -191,6 +191,7 @@ module elm_driver
   use UrbanxxNetLongwaveMod       , only : urbanxx_netLongwave
   use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
   use UrbanxxSoilFluxesMod        , only : urbanxx_soilFluxes, urbanxx_soilFluxes_check
+  use UrbanxxSnowMod              , only : urbanxx_updateSnowFraction
   !
   ! !PUBLIC TYPES:
   implicit none
@@ -1015,6 +1016,11 @@ contains
              col_ws%frac_sno(c) = min( col_ws%snow_depth(c)/0.05_r8, 1._r8)
           end if
        end do
+
+       ! URBANxx: apply same Bonan 1996 formula to internal FracSno
+       if (use_urbanxx) then
+          call urbanxx_updateSnowFraction(filter(nc)%num_urbanl, filter(nc)%urbanl)
+       end if
 
        ! ============================================================================
        ! Snow aging routine based on Flanner and Zender (2006), Linking snowpack

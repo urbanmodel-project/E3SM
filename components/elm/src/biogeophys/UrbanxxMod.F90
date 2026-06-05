@@ -1876,7 +1876,6 @@ contains
      end associate
 
    end subroutine SetLayerTemperatures
-
    !-----------------------------------------------------------------------
    subroutine SetUrbanParameters(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc, &
         urbanparams_vars, top_as, soilstate_vars, soilhydrology_vars)
@@ -1910,6 +1909,7 @@ contains
      call SetHeatCapacity(urban, num_urbanl, filter_urbanl, urbanparams_vars)
      call SetSoilProperties(urban, num_urbanl, num_urbanc, filter_urbanc, soilstate_vars)
      call SetHkDepthAndTopoSlope(urban, num_urbanl, num_urbanc, filter_urbanc, soilhydrology_vars)
+     call SetNMelt(urban, num_urbanl, num_urbanc, filter_urbanc)
      call SetCanyonAirStates(urban, num_urbanl, filter_urbanl)
 
    end subroutine SetUrbanParameters
@@ -1969,5 +1969,68 @@ contains
      deallocate(topo_slope_buf)
 
    end subroutine SetHkDepthAndTopoSlope
+
+   !-----------------------------------------------------------------------
+   subroutine SetNMelt(urban, num_urbanl, num_urbanc, filter_urbanc)
+     !
+     ! !DESCRIPTION:
+     ! Send col_pp%n_melt (SCA shape parameter) from ELM to URBANxx for roof,
+     ! impervious road, and pervious road surfaces.  Each landunit has exactly
+     ! one column of each type; n_melt is a time-invariant parameter set once
+     ! during initialization in initVerticalMod.
+     !
+     use ColumnType    , only : col_pp
+     use column_varcon , only : icol_roof, icol_road_imperv, icol_road_perv
+     !
+     implicit none
+     !
+     type(UrbanType)  , intent(in) :: urban
+     integer(c_int)   , intent(in) :: num_urbanl
+     integer(c_int)   , intent(in) :: num_urbanc
+     integer          , intent(in) :: filter_urbanc(:)
+     !
+     integer(c_int)                       :: status
+     integer                              :: fc, c, idx_roof, idx_imperv, idx_perv
+     real(c_double), allocatable, target  :: nmelt_roof(:)
+     real(c_double), allocatable, target  :: nmelt_imperv(:)
+     real(c_double), allocatable, target  :: nmelt_perv(:)
+
+     allocate(nmelt_roof(num_urbanl))
+     allocate(nmelt_imperv(num_urbanl))
+     allocate(nmelt_perv(num_urbanl))
+     nmelt_roof   = 0._c_double
+     nmelt_imperv = 0._c_double
+     nmelt_perv   = 0._c_double
+
+     idx_roof   = 0
+     idx_imperv = 0
+     idx_perv   = 0
+     do fc = 1, num_urbanc
+       c = filter_urbanc(fc)
+       select case (col_pp%itype(c))
+       case (icol_roof)
+         idx_roof = idx_roof + 1
+         nmelt_roof(idx_roof) = real(col_pp%n_melt(c), c_double)
+       case (icol_road_imperv)
+         idx_imperv = idx_imperv + 1
+         nmelt_imperv(idx_imperv) = real(col_pp%n_melt(c), c_double)
+       case (icol_road_perv)
+         idx_perv = idx_perv + 1
+         nmelt_perv(idx_perv) = real(col_pp%n_melt(c), c_double)
+       end select
+     end do
+
+     call UrbanSetNMeltRoof(urban, c_loc(nmelt_roof), num_urbanl, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+     call UrbanSetNMeltImperviousRoad(urban, c_loc(nmelt_imperv), num_urbanl, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+     call UrbanSetNMeltPerviousRoad(urban, c_loc(nmelt_perv), num_urbanl, status)
+     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+     deallocate(nmelt_roof)
+     deallocate(nmelt_imperv)
+     deallocate(nmelt_perv)
+
+   end subroutine SetNMelt
 
 end module UrbanxxMod
