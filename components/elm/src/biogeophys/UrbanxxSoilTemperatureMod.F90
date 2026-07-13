@@ -30,6 +30,8 @@ module UrbanxxSoilTemperatureMod
   public :: urbanxx_soilTemperature
   public :: urbanxx_soilTemperature_check
 
+  logical, save :: mapping_reported = .false.
+
 contains
 
   !-----------------------------------------------------------------------
@@ -68,8 +70,11 @@ contains
     !
     use TemperatureType, only : temperature_type
     use ColumnType     , only : col_pp
+    use ColumnDataType , only : col_es, col_ws
     use column_varcon  , only : icol_road_perv
     use elm_varpar     , only : nlevgrnd, nlevurb
+    use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
+    use elm_time_manager  , only : get_nstep
     !
     implicit none
     !
@@ -82,12 +87,75 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer(c_int)                       :: status
-    integer                              :: fc, c, j, fl, l
+    integer                              :: fc, c, j, fl, l, count
+    integer                              :: idx_road_perv
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
-
+    real(c_double), allocatable, target  :: layertemp_perroad_2d(:,:)
+    real(c_double), allocatable, target  :: waterliq_perroad_2d(:,:)
+    real(c_double), allocatable, target  :: waterice_perroad_2d(:,:)
     associate(                        &
-        nlev2bed => col_pp%nlevbed    & ! Input: [integer  (:)   ]  number of layers to bedrock
+        nlev2bed => col_pp%nlevbed    , & ! Input: [integer  (:)   ]  number of layers to bedrock
+        t_soisno => col_es%t_soisno   , & ! Input: [real(r8) (:,:) ]  soil temperature (Kelvin)
+        h2osoi_liq => col_ws%h2osoi_liq, & ! Input: [real(r8) (:,:) ] liquid water (kg/m2)
+        h2osoi_ice => col_ws%h2osoi_ice  & ! Input: [real(r8) (:,:) ] ice water (kg/m2)
         )
+
+      if (get_nstep() == 1) then
+        size2D_soil(1) = num_urbanl
+        size2D_soil(2) = nlevgrnd
+
+        call UrbanGetLayerTempPerviousRoad(urbanxx, c_loc(layertemp_perroad), size2D_soil, status)
+        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+        allocate(layertemp_perroad_2d(num_urbanl, nlevgrnd))
+        allocate(waterliq_perroad_2d(num_urbanl, nlevgrnd))
+        allocate(waterice_perroad_2d(num_urbanl, nlevgrnd))
+
+        call UrbanGetSoilLiquidWaterPerviousRoad(urbanxx, c_loc(waterliq_perroad_2d), size2D_soil, status)
+        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+        call UrbanGetSoilIceContentPerviousRoad(urbanxx, c_loc(waterice_perroad_2d), size2D_soil, status)
+        if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+        if (UrbanKokkosIsLayoutLeft()) then
+          count = 0
+          do j = 1, nlevgrnd
+            do l = 1, num_urbanl
+              count = count + 1
+              layertemp_perroad_2d(l,j) = layertemp_perroad(count)
+            end do
+          end do
+        else
+          count = 0
+          do l = 1, num_urbanl
+            do j = 1, nlevgrnd
+              count = count + 1
+              layertemp_perroad_2d(l,j) = layertemp_perroad(count)
+            end do
+          end do
+        end if
+
+        idx_road_perv = 0
+        do fc = 1, num_urbanc
+          c = filter_urbanc(fc)
+          if (col_pp%itype(c) == icol_road_perv) then
+            idx_road_perv = idx_road_perv + 1
+            if (idx_road_perv == 1) then
+              write(iulog,'(A,I0,A,I0)') 'URBANxx pre-solve pervious road state: column=', c, ', packed_index=', idx_road_perv
+              do j = 1, nlevgrnd
+                write(iulog,'(A,I0,6(A,ES24.16))') '  layer=', j, &
+                     ', elm_t=', t_soisno(c,j), ', uxx_t=', layertemp_perroad_2d(idx_road_perv,j), &
+                     ', elm_liq=', h2osoi_liq(c,j), ', uxx_liq=', waterliq_perroad_2d(idx_road_perv,j), &
+                     ', elm_ice=', h2osoi_ice(c,j), ', uxx_ice=', waterice_perroad_2d(idx_road_perv,j)
+              end do
+              exit
+            end if
+          end if
+        end do
+
+        deallocate(layertemp_perroad_2d)
+        deallocate(waterliq_perroad_2d)
+        deallocate(waterice_perroad_2d)
+      end if
 
       call UrbanComputeHeatDiffusion(urbanxx, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -129,7 +197,8 @@ contains
     use elm_varpar     , only : nlevgrnd, nlevurb
     use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
-    use ColumnDataType    , only : col_es
+    use ColumnDataType    , only : col_es, col_ws, col_ef
+    use elm_time_manager  , only : get_nstep, get_curr_date
     !
     implicit none
     !
@@ -151,11 +220,23 @@ contains
     integer                              :: fc, c, j, fl, l
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
     real(r8)                             :: max_error, max_rel_error
+    real(r8)                             :: column_max_error, column_max_rel_error
+    real(r8)                             :: elm_value, urbanxx_value, signed_diff, abs_diff, rel_diff
     integer :: idx_roof, idx_road_imperv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
-    integer :: count
+    integer :: count, column_max_layer, column_packed_idx
+    integer :: year, month, day, tod
 
     associate(                          &
-         t_soisno                => col_es%t_soisno  & ! Output: [real(r8) (:,:) ]  soil temperature (Kelvin)
+         t_soisno                => col_es%t_soisno, & ! Output: [real(r8) (:,:) ]  soil temperature (Kelvin)
+         h2osno                  => col_ws%h2osno, & ! Input: [real(r8) (:)] snow water (kg/m2)
+         snow_depth              => col_ws%snow_depth, & ! Input: [real(r8) (:)] snow depth (m)
+         frac_sno                => col_ws%frac_sno, & ! Input: [real(r8) (:)] snow fraction (-)
+         h2osoi_liq              => col_ws%h2osoi_liq, & ! Input: [real(r8) (:,:)] liquid water (kg/m2)
+         h2osoi_ice              => col_ws%h2osoi_ice, & ! Input: [real(r8) (:,:)] ice water (kg/m2)
+         eflx_dhsdT              => col_ef%eflx_dhsdT, & ! Input: [real(r8) (:)] derivative of hs wrt temperature
+         eflx_hs_top_snow        => col_ef%eflx_hs_top_snow, & ! Input: [real(r8) (:)] heat flux on top snow layer
+         eflx_sabg_lyr           => col_ef%eflx_sabg_lyr, & ! Input: [real(r8) (:,:)] absorbed solar by layer
+         htvp                    => col_ef%htvp  & ! Input: [real(r8) (:)] latent heat
         )
     max_error     = 0._r8
     max_rel_error = 0._r8
@@ -211,44 +292,68 @@ contains
 
       do fc = 1, num_urbanc
         c = filter_urbanc(fc)
+        idx_landunit = col_pp%landunit(c)
+        column_max_error = 0._r8
+        column_max_rel_error = 0._r8
+        column_max_layer = -1
+        column_packed_idx = -1
         select case (col_pp%itype(c))
         case (icol_roof)
           idx_roof = idx_roof + 1
+          column_packed_idx = idx_roof
           do j = 1, nlevurb
-            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_roof_2d(idx_roof,j)))
-            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_roof_2d(idx_roof,j))     / max(abs(t_soisno(c,j)), 1.0e-20_r8))
+            call record_error(t_soisno(c,j), layertemp_roof_2d(idx_roof,j), j)
           end do
         case (icol_sunwall)
           idx_sunwall = idx_sunwall + 1
+          column_packed_idx = idx_sunwall
           do j = 1, nlevurb
-            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_sunwall_2d(idx_sunwall,j)))
-            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_sunwall_2d(idx_sunwall,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
+            call record_error(t_soisno(c,j), layertemp_sunwall_2d(idx_sunwall,j), j)
           end do
         case (icol_shadewall)
           idx_shadwall = idx_shadwall + 1
+          column_packed_idx = idx_shadwall
           do j = 1, nlevurb
-            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_shadwall_2d(idx_shadwall,j)))
-            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_shadwall_2d(idx_shadwall,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
+            call record_error(t_soisno(c,j), layertemp_shadwall_2d(idx_shadwall,j), j)
           end do
         case (icol_road_imperv)
           idx_road_imperv = idx_road_imperv + 1
+          column_packed_idx = idx_road_imperv
           do j = 1, nlevgrnd
-            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_improad_2d(idx_road_imperv,j)))
-            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_improad_2d(idx_road_imperv,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
+            call record_error(t_soisno(c,j), layertemp_improad_2d(idx_road_imperv,j), j)
           end do
         case (icol_road_perv)
           idx_road_perv = idx_road_perv + 1
+          column_packed_idx = idx_road_perv
+          if (.not. mapping_reported) then
+            write(iulog,'(A,4(I0,A))') 'URBANxx pervious-road mapping: column=', c, ', landunit=', idx_landunit, &
+                 ', packed_index=', idx_road_perv, ', column_type=', col_pp%itype(c), ''
+          end if
           do j = 1, nlevgrnd
-            max_error     = max(max_error,     abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)))
-            max_rel_error = max(max_rel_error, abs(t_soisno(c,j) - layertemp_perroad_2d(idx_road_perv,j)) / max(abs(t_soisno(c,j)), 1.0e-20_r8))
+            call record_error(t_soisno(c,j), layertemp_perroad_2d(idx_road_perv,j), j)
           end do
         end select
-        if (max_error > 1.0e-9) then
-          write(iulog,*)'Max error in temperature: ', max_error, ' at column ', c, ' itype = ', col_pp%itype(c), &
-          'exceed tolerance'
+
+        if (column_max_error > 1.0e-9_r8) then
+          call get_curr_date(year, month, day, tod)
+          write(iulog,'(A)') 'ERROR: URBANxx soil-temperature comparison exceeds tolerance'
+          write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
+          write(iulog,'(A,I0,A,I0,A,I0,A,I0)') '  column=', c, ', landunit=', idx_landunit, &
+               ', packed_index=', column_packed_idx, ', column_type=', col_pp%itype(c)
+          write(iulog,'(A,I0)') '  layer=', column_max_layer
+          write(iulog,'(A,ES24.16)') '  ELM temperature       =', elm_value
+          write(iulog,'(A,ES24.16)') '  URBANxx temperature   =', urbanxx_value
+          write(iulog,'(A,ES24.16)') '  signed difference     =', signed_diff
+          write(iulog,'(A,ES24.16)') '  absolute difference   =', column_max_error
+          write(iulog,'(A,ES24.16)') '  relative difference   =', column_max_rel_error
+          write(iulog,'(A,3ES24.16)') '  ELM snow state        =', h2osno(c), snow_depth(c), frac_sno(c)
+          write(iulog,'(A,2ES24.16)') '  ELM top liq/ice       =', h2osoi_liq(c,1), h2osoi_ice(c,1)
+          write(iulog,'(A,3ES24.16)') '  ELM flux deriv/state  =', eflx_dhsdT(c), eflx_hs_top_snow(c), htvp(c)
+          write(iulog,'(A,ES24.16)') '  ELM sabg_lyr top      =', eflx_sabg_lyr(c,1)
           call exit(0)
         endif
       end do
+      mapping_reported = .true.
       write(iulog,*) 'Max error in soil temperatures      : ', max_error, ' (rel: ', max_rel_error, ')'
 
       deallocate(layertemp_roof_2d)
@@ -258,6 +363,28 @@ contains
       deallocate(layertemp_perroad_2d)
 
     end associate
+
+  contains
+
+    subroutine record_error(elm_temperature, urbanxx_temperature, layer)
+      real(r8), intent(in) :: elm_temperature, urbanxx_temperature
+      integer, intent(in) :: layer
+
+      abs_diff = abs(elm_temperature - urbanxx_temperature)
+      rel_diff = abs_diff / max(abs(elm_temperature), 1.0e-20_r8)
+      max_rel_error = max(max_rel_error, rel_diff)
+      if (abs_diff > column_max_error) then
+        column_max_error = abs_diff
+        column_max_rel_error = rel_diff
+        column_max_layer = layer
+        elm_value = elm_temperature
+        urbanxx_value = urbanxx_temperature
+        signed_diff = elm_temperature - urbanxx_temperature
+      end if
+      if (abs_diff > max_error) then
+        max_error = abs_diff
+      end if
+    end subroutine record_error
   end subroutine urbanxx_soilTemperature_check
 
   end module UrbanxxSoilTemperatureMod

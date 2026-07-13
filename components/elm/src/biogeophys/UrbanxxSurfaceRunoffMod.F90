@@ -60,14 +60,12 @@ contains
        soilhydrology_vars, soilstate_vars, dtime)
     !
     ! !DESCRIPTION:
-    ! Set surface runoff inputs, call UrbanComputeSurfaceRunoff, and scatter
-    ! outputs back to ELM arrays.
+    ! Set surface runoff inputs and call UrbanComputeSurfaceRunoff. Outputs
+    ! are retrieved into module-level buffers for urbanxx_surfaceRunoff_check
+    ! only; never written back into ELM arrays.
     !
     use SoilHydrologyType  , only : soilhydrology_type
     use SoilStateType      , only : soilstate_type
-    use ColumnType         , only : col_pp
-    use column_varcon      , only : icol_road_perv, icol_roof, icol_road_imperv, &
-                                    icol_sunwall, icol_shadewall
     !
     implicit none
     !
@@ -81,71 +79,36 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer(c_int) :: status
-    integer        :: fc, c, g, idx_perv
-    integer        :: idx_roof, idx_imperv, idx_sunwall, idx_shadewall
 
-    associate( &
-         qflx_surf       => col_wf%qflx_surf                    , & ! Output: [real(r8)(:)] surface runoff (mm/s)
-         h2osoi_liq      => col_ws%h2osoi_liq                     & ! Output: [real(r8)(:,:)] liquid water (kg/m2)
-         )
+    ! Compute surface runoff
+    call UrbanComputeSurfaceRunoff(urbanxx, real(dtime, c_double), status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! Compute surface runoff
-      call UrbanComputeSurfaceRunoff(urbanxx, real(dtime, c_double), status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    ! Retrieve QflxSurf outputs — all five surfaces (diagnostic only; see
+    ! urbanxx_surfaceRunoff_check, which compares these against ELM's own
+    ! col_wf%qflx_surf/col_ws%h2osoi_liq. Never write URBANxx output back
+    ! into ELM data structures.)
+    call UrbanGetQflxSurfRoof(urbanxx, c_loc(out_qflx_surf_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! Retrieve QflxSurf outputs — all five surfaces
-      call UrbanGetQflxSurfRoof(urbanxx, c_loc(out_qflx_surf_roof), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetQflxSurfImperviousRoad(urbanxx, c_loc(out_qflx_surf_imperv), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanGetQflxSurfImperviousRoad(urbanxx, c_loc(out_qflx_surf_imperv), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetQflxSurfPerviousRoad(urbanxx, c_loc(out_qflx_surf_perv), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanGetQflxSurfPerviousRoad(urbanxx, c_loc(out_qflx_surf_perv), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetQflxSurfSunlitWall(urbanxx, c_loc(out_qflx_surf_sunwall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanGetQflxSurfSunlitWall(urbanxx, c_loc(out_qflx_surf_sunwall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanGetQflxSurfShadedWall(urbanxx, c_loc(out_qflx_surf_shadewall), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      call UrbanGetQflxSurfShadedWall(urbanxx, c_loc(out_qflx_surf_shadewall), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    ! Retrieve updated TopH2OSoiLiq (roof and impervious road)
+    call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(out_top_h2osoi_liq_roof), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-      ! Retrieve updated TopH2OSoiLiq (roof and impervious road)
-      call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(out_top_h2osoi_liq_roof), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(out_top_h2osoi_liq_imperv), num_urbanl, status)
-      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
-
-      ! Scatter outputs back to ELM
-      idx_roof      = 0
-      idx_imperv    = 0
-      idx_perv      = 0
-      idx_sunwall   = 0
-      idx_shadewall = 0
-      do fc = 1, num_urbanc
-        c = filter_urbanc(fc)
-        select case (col_pp%itype(c))
-        case (icol_roof)
-          idx_roof = idx_roof + 1
-          qflx_surf(c)      = out_qflx_surf_roof(idx_roof)
-          h2osoi_liq(c, 1)  = out_top_h2osoi_liq_roof(idx_roof)
-        case (icol_road_imperv)
-          idx_imperv = idx_imperv + 1
-          qflx_surf(c)      = out_qflx_surf_imperv(idx_imperv)
-          h2osoi_liq(c, 1)  = out_top_h2osoi_liq_imperv(idx_imperv)
-        case (icol_road_perv)
-          idx_perv = idx_perv + 1
-          qflx_surf(c)      = out_qflx_surf_perv(idx_perv)
-        case (icol_sunwall)
-          idx_sunwall = idx_sunwall + 1
-          qflx_surf(c)      = out_qflx_surf_sunwall(idx_sunwall)
-        case (icol_shadewall)
-          idx_shadewall = idx_shadewall + 1
-          qflx_surf(c)      = out_qflx_surf_shadewall(idx_shadewall)
-        end select
-      end do
-
-    end associate
+    call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(out_top_h2osoi_liq_imperv), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
   end subroutine urbanxx_surfaceRunoff
 

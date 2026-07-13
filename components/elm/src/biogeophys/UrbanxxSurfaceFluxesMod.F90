@@ -18,6 +18,8 @@ module UrbanxxSurfaceFluxesMod
   use VegetationDataType   , only : veg_ef, veg_wf
   use VegetationType       , only : veg_pp
   use LandunitDataType     , only : lun_es, lun_ws
+  use LandunitType         , only : lun_pp
+  use TopounitDataType     , only : top_as
 
   implicit none
 
@@ -92,6 +94,7 @@ contains
     !
     use column_varcon, only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
     use ColumnType, only : col_pp
+    use ColumnDataType, only : col_es, col_ws
     !
     implicit none
     !
@@ -241,6 +244,16 @@ contains
          write(iulog,*) '  err_qflx_evap_soi = ', err_qflx_evap_soi
          write(iulog,*) '  err_cgrnds        = ', err_cgrnds
          write(iulog,*) '  err_cgrndl        = ', err_cgrndl
+         write(iulog,'(A,2ES24.16)') '  ELM/URBANxx sh     = ', veg_ef%eflx_sh_grnd(p), eflx_sh_grnd_roof(idx_roof)
+         write(iulog,'(A,2ES24.16)') '  ELM/URBANxx evap   = ', veg_wf%qflx_evap_soi(p), qflx_evap_soi_roof(idx_roof)
+         write(iulog,'(A,2ES24.16)') '  ELM/URBANxx cgrnds = ', veg_ef%cgrnds(p), cgrnds_roof(idx_roof)
+         write(iulog,'(A,ES24.16)') '  ELM t_grnd          = ', col_es%t_grnd(c)
+         write(iulog,'(A,ES24.16)') '  ELM snow_depth      = ', col_ws%snow_depth(c)
+         write(iulog,'(A,ES24.16)') '  ELM h2osno          = ', col_ws%h2osno(c)
+         write(iulog,'(A,ES24.16)') '  ELM frac_sno        = ', col_ws%frac_sno(c)
+         write(iulog,'(A,2ES24.16)') '  ELM top liq/ice     = ', col_ws%h2osoi_liq(c,1), col_ws%h2osoi_ice(c,1)
+         write(iulog,'(A,2ES24.16)') '  ELM taf/qaf         = ', lun_es%taf(col_pp%landunit(c)), lun_ws%qaf(col_pp%landunit(c))
+         write(iulog,'(A,ES24.16)') '  ELM gustiness       = ', top_as%ugust(lun_pp%topounit(col_pp%landunit(c)))
          call exit(0)
       end if
 

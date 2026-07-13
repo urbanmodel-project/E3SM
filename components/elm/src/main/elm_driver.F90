@@ -187,7 +187,7 @@ module elm_driver
 
   use timeinfoMod
   use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing
-  use UrbanxxNetShortwaveMod      , only : urbanxx_netShortwave
+  use UrbanxxNetShortwaveMod      , only : urbanxx_netShortwave, urbanxx_netShortwave_check
   use UrbanxxNetLongwaveMod       , only : urbanxx_netLongwave
   use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
   use UrbanxxSoilFluxesMod        , only : urbanxx_soilFluxes, urbanxx_soilFluxes_check
@@ -1453,6 +1453,10 @@ contains
                 call urbanxx_netShortwave( &
                      filter(nc)%num_urbanl, &
                      filter(nc)%urbanl)
+                call urbanxx_netShortwave_check( &
+                     filter(nc)%num_urbanp, &
+                     filter(nc)%urbanp,     &
+                     solarabs_vars)
              end if
           end if
 
