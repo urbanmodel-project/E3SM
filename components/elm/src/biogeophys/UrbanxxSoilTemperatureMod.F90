@@ -26,6 +26,12 @@ module UrbanxxSoilTemperatureMod
   real(c_double) , allocatable, target, public :: layertemp_sunwall(:)
   real(c_double) , allocatable, target, public :: layertemp_shadwall(:)
 
+  ! Native URBANxx snow-melt flux, for validation against ELM's own
+  ! col_wf%qflx_snomelt in urbanxx_soilTemperature_check — (num_urbanl) 1D
+  real(c_double) , allocatable, target, public :: qflxsnowmelt_roof(:)
+  real(c_double) , allocatable, target, public :: qflxsnowmelt_improad(:)
+  real(c_double) , allocatable, target, public :: qflxsnowmelt_perroad(:)
+
   public :: urbanxx_soilTemperature_init
   public :: urbanxx_soilTemperature
   public :: urbanxx_soilTemperature_check
@@ -55,6 +61,10 @@ contains
     allocate(layertemp_shadwall(num_urbanl * nlevurb))
     allocate(layertemp_improad(num_urbanl * nlevgrnd))
     allocate(layertemp_perroad(num_urbanl * nlevgrnd))
+
+    allocate(qflxsnowmelt_roof(num_urbanl))
+    allocate(qflxsnowmelt_improad(num_urbanl))
+    allocate(qflxsnowmelt_perroad(num_urbanl))
 
   end subroutine urbanxx_soilTemperature_init
 
@@ -181,6 +191,17 @@ contains
       call UrbanGetLayerTempPerviousRoad(urbanxx, c_loc(layertemp_perroad), size2D_soil, status)
       if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+      ! Native URBANxx snow-melt flux (already computed above, inside
+      ! UrbanComputeHeatDiffusion's phase-change step) — retrieved here for
+      ! validation against ELM's own qflx_snomelt in
+      ! urbanxx_soilTemperature_check.
+      call UrbanGetQflxSnowMeltRoof(urbanxx, c_loc(qflxsnowmelt_roof), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanGetQflxSnowMeltImperviousRoad(urbanxx, c_loc(qflxsnowmelt_improad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+      call UrbanGetQflxSnowMeltPerviousRoad(urbanxx, c_loc(qflxsnowmelt_perroad), num_urbanl, status)
+      if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
     end associate
 
   end subroutine urbanxx_soilTemperature
@@ -197,7 +218,7 @@ contains
     use elm_varpar     , only : nlevgrnd, nlevurb
     use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv, icol_sunwall, icol_shadewall
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
-    use ColumnDataType    , only : col_es, col_ws, col_ef
+    use ColumnDataType    , only : col_es, col_ws, col_ef, col_wf
     use elm_time_manager  , only : get_nstep, get_curr_date
     !
     implicit none
@@ -222,6 +243,10 @@ contains
     real(r8)                             :: max_error, max_rel_error
     real(r8)                             :: column_max_error, column_max_rel_error
     real(r8)                             :: elm_value, urbanxx_value, signed_diff, abs_diff, rel_diff
+    real(r8)                             :: flux_max_error, flux_max_rel_error
+    real(r8)                             :: column_flux_error, column_flux_rel_error
+    real(r8)                             :: flux_elm_value, flux_urbanxx_value
+    real(r8)                             :: flux_signed_diff, flux_abs_diff, flux_rel_diff
     integer :: idx_roof, idx_road_imperv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
     integer :: count, column_max_layer, column_packed_idx
     integer :: year, month, day, tod
@@ -236,10 +261,13 @@ contains
          eflx_dhsdT              => col_ef%eflx_dhsdT, & ! Input: [real(r8) (:)] derivative of hs wrt temperature
          eflx_hs_top_snow        => col_ef%eflx_hs_top_snow, & ! Input: [real(r8) (:)] heat flux on top snow layer
          eflx_sabg_lyr           => col_ef%eflx_sabg_lyr, & ! Input: [real(r8) (:,:)] absorbed solar by layer
-         htvp                    => col_ef%htvp  & ! Input: [real(r8) (:)] latent heat
+         htvp                    => col_ef%htvp, & ! Input: [real(r8) (:)] latent heat
+         qflx_snomelt            => col_wf%qflx_snomelt  & ! Input: [real(r8) (:)] snow melt (mm H2O/s)
         )
     max_error     = 0._r8
     max_rel_error = 0._r8
+    flux_max_error     = 0._r8
+    flux_max_rel_error = 0._r8
     idx_roof = 0
     idx_road_imperv = 0
     idx_road_perv = 0
@@ -297,6 +325,8 @@ contains
         column_max_rel_error = 0._r8
         column_max_layer = -1
         column_packed_idx = -1
+        column_flux_error = 0._r8
+        column_flux_rel_error = 0._r8
         select case (col_pp%itype(c))
         case (icol_roof)
           idx_roof = idx_roof + 1
@@ -304,6 +334,7 @@ contains
           do j = 1, nlevurb
             call record_error(t_soisno(c,j), layertemp_roof_2d(idx_roof,j), j)
           end do
+          call record_flux_error(qflx_snomelt(c), qflxsnowmelt_roof(idx_roof))
         case (icol_sunwall)
           idx_sunwall = idx_sunwall + 1
           column_packed_idx = idx_sunwall
@@ -322,6 +353,7 @@ contains
           do j = 1, nlevgrnd
             call record_error(t_soisno(c,j), layertemp_improad_2d(idx_road_imperv,j), j)
           end do
+          call record_flux_error(qflx_snomelt(c), qflxsnowmelt_improad(idx_road_imperv))
         case (icol_road_perv)
           idx_road_perv = idx_road_perv + 1
           column_packed_idx = idx_road_perv
@@ -332,6 +364,7 @@ contains
           do j = 1, nlevgrnd
             call record_error(t_soisno(c,j), layertemp_perroad_2d(idx_road_perv,j), j)
           end do
+          call record_flux_error(qflx_snomelt(c), qflxsnowmelt_perroad(idx_road_perv))
         end select
 
         if (column_max_error > 1.0e-9_r8) then
@@ -352,9 +385,26 @@ contains
           write(iulog,'(A,ES24.16)') '  ELM sabg_lyr top      =', eflx_sabg_lyr(c,1)
           call exit(0)
         endif
+
+        if (column_flux_error > 1.0e-9_r8) then
+          call get_curr_date(year, month, day, tod)
+          write(iulog,'(A)') 'ERROR: URBANxx snow-melt flux comparison exceeds tolerance'
+          write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
+          write(iulog,'(A,I0,A,I0,A,I0,A,I0)') '  column=', c, ', landunit=', idx_landunit, &
+               ', packed_index=', column_packed_idx, ', column_type=', col_pp%itype(c)
+          write(iulog,'(A,ES24.16)') '  ELM qflx_snomelt      =', flux_elm_value
+          write(iulog,'(A,ES24.16)') '  URBANxx QflxSnowMelt  =', flux_urbanxx_value
+          write(iulog,'(A,ES24.16)') '  signed difference     =', flux_signed_diff
+          write(iulog,'(A,ES24.16)') '  absolute difference   =', column_flux_error
+          write(iulog,'(A,ES24.16)') '  relative difference   =', column_flux_rel_error
+          write(iulog,'(A,3ES24.16)') '  ELM snow state        =', h2osno(c), snow_depth(c), frac_sno(c)
+          write(iulog,'(A,2ES24.16)') '  ELM top liq/ice       =', h2osoi_liq(c,1), h2osoi_ice(c,1)
+          call exit(0)
+        endif
       end do
       mapping_reported = .true.
       write(iulog,*) 'Max error in soil temperatures      : ', max_error, ' (rel: ', max_rel_error, ')'
+      write(iulog,*) 'Max error in snow-melt flux         : ', flux_max_error, ' (rel: ', flux_max_rel_error, ')'
 
       deallocate(layertemp_roof_2d)
       deallocate(layertemp_sunwall_2d)
@@ -385,6 +435,24 @@ contains
         max_error = abs_diff
       end if
     end subroutine record_error
+
+    subroutine record_flux_error(elm_flux, urbanxx_flux)
+      real(r8), intent(in) :: elm_flux, urbanxx_flux
+
+      flux_abs_diff = abs(elm_flux - urbanxx_flux)
+      flux_rel_diff = flux_abs_diff / max(abs(elm_flux), 1.0e-20_r8)
+      flux_max_rel_error = max(flux_max_rel_error, flux_rel_diff)
+      if (flux_abs_diff > column_flux_error) then
+        column_flux_error = flux_abs_diff
+        column_flux_rel_error = flux_rel_diff
+        flux_elm_value = elm_flux
+        flux_urbanxx_value = urbanxx_flux
+        flux_signed_diff = elm_flux - urbanxx_flux
+      end if
+      if (flux_abs_diff > flux_max_error) then
+        flux_max_error = flux_abs_diff
+      end if
+    end subroutine record_flux_error
   end subroutine urbanxx_soilTemperature_check
 
   end module UrbanxxSoilTemperatureMod
