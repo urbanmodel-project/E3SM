@@ -19,6 +19,18 @@ module UrbanxxSurfaceRunoffMod
 
   private
 
+  ! Persistent input buffers (allocated once in init)
+  real(c_double) , allocatable, target :: in_qflx_snow_melt_roof(:)
+  real(c_double) , allocatable, target :: in_qflx_snow_melt_imperv(:)
+  real(c_double) , allocatable, target :: in_qflx_snow_melt_perv(:)
+  real(c_double) , allocatable, target :: in_qflx_flood_roof(:)
+  real(c_double) , allocatable, target :: in_qflx_flood_imperv(:)
+  real(c_double) , allocatable, target :: in_qflx_flood_perv(:)
+  real(c_double) , allocatable, target :: in_wtfact_perv(:)
+  real(c_double) , allocatable, target :: in_fover_perv(:)
+  real(c_double) , allocatable, target :: in_frost_table_perv(:)
+  real(c_double) , allocatable, target :: in_zwt_perched_perv(:)
+
   ! Persistent output buffers (allocated once in init)
   real(c_double) , allocatable, target, public :: out_qflx_surf_roof(:)
   real(c_double) , allocatable, target, public :: out_qflx_surf_imperv(:)
@@ -44,6 +56,18 @@ contains
     implicit none
     integer(c_int), intent(in) :: num_urbanl
 
+    ! Input buffers
+    allocate(in_qflx_snow_melt_roof(num_urbanl))
+    allocate(in_qflx_snow_melt_imperv(num_urbanl))
+    allocate(in_qflx_snow_melt_perv(num_urbanl))
+    allocate(in_qflx_flood_roof(num_urbanl))
+    allocate(in_qflx_flood_imperv(num_urbanl))
+    allocate(in_qflx_flood_perv(num_urbanl))
+    allocate(in_wtfact_perv(num_urbanl))
+    allocate(in_fover_perv(num_urbanl))
+    allocate(in_frost_table_perv(num_urbanl))
+    allocate(in_zwt_perched_perv(num_urbanl))
+
     ! Output buffers
     allocate(out_qflx_surf_roof(num_urbanl))
     allocate(out_qflx_surf_imperv(num_urbanl))
@@ -66,6 +90,8 @@ contains
     !
     use SoilHydrologyType  , only : soilhydrology_type
     use SoilStateType      , only : soilstate_type
+    use ColumnType         , only : col_pp
+    use column_varcon      , only : icol_roof, icol_road_imperv, icol_road_perv
     !
     implicit none
     !
@@ -79,6 +105,83 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer(c_int) :: status
+    integer        :: fc, c, idx_roof, idx_imperv, idx_perv
+
+    ! Pack ELM's qflx_snomelt (snow melt contribution to qflx_top_soil;
+    ! ELM reference: SnowHydrologyMod.F90:472) for roof, impervious road,
+    ! and pervious road columns, and set into URBANxx before computing
+    ! surface runoff. atm_rain(l) (ForcRain) alone does not capture
+    ! melt-water released from a fully-melting initial snowpack.
+    idx_roof   = 0
+    idx_imperv = 0
+    idx_perv   = 0
+    do fc = 1, num_urbanc
+       c = filter_urbanc(fc)
+       if (col_pp%itype(c) == icol_roof) then
+          idx_roof = idx_roof + 1
+          in_qflx_snow_melt_roof(idx_roof) = col_wf%qflx_snomelt(c)
+          in_qflx_flood_roof(idx_roof)     = col_wf%qflx_floodc(c)
+       else if (col_pp%itype(c) == icol_road_imperv) then
+          idx_imperv = idx_imperv + 1
+          in_qflx_snow_melt_imperv(idx_imperv) = col_wf%qflx_snomelt(c)
+          in_qflx_flood_imperv(idx_imperv)     = col_wf%qflx_floodc(c)
+       else if (col_pp%itype(c) == icol_road_perv) then
+          idx_perv = idx_perv + 1
+          in_qflx_snow_melt_perv(idx_perv) = col_wf%qflx_snomelt(c)
+          in_qflx_flood_perv(idx_perv)     = col_wf%qflx_floodc(c)
+          in_wtfact_perv(idx_perv)         = soilstate_vars%wtfact_col(c)
+          in_fover_perv(idx_perv)          = soilhydrology_vars%fover(col_pp%gridcell(c))
+          in_frost_table_perv(idx_perv)    = soilhydrology_vars%frost_table_col(c)
+          in_zwt_perched_perv(idx_perv)    = soilhydrology_vars%zwt_perched_col(c)
+       end if
+    end do
+    call UrbanSetQflxSnowMeltRoof(urbanxx, c_loc(in_qflx_snow_melt_roof), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetQflxSnowMeltImperviousRoad(urbanxx, c_loc(in_qflx_snow_melt_imperv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetQflxSnowMeltPerviousRoad(urbanxx, c_loc(in_qflx_snow_melt_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    ! Flood water flux (river-routing-model backflow) is added
+    ! unconditionally to qflx_surf for every non-wall urban column (ELM
+    ! reference: SoilHydrologyMod.F90:247-248).
+    call UrbanSetQflxFloodRoof(urbanxx, c_loc(in_qflx_flood_roof), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetQflxFloodImperviousRoad(urbanxx, c_loc(in_qflx_flood_imperv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetQflxFloodPerviousRoad(urbanxx, c_loc(in_qflx_flood_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    ! Pervious road fsat inputs (ELM reference: SoilHydrologyMod.F90:150-191).
+    ! These were previously never set, leaving URBANxx's Wtfact/Fover/
+    ! FrostTable/ZwtPerched Kokkos views at their zero-initialized default,
+    ! which made fsat (and therefore qflx_surf) identically zero for
+    ! pervious road every timestep.
+    call UrbanSetWtfactPerviousRoad(urbanxx, c_loc(in_wtfact_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetFoverPerviousRoad(urbanxx, c_loc(in_fover_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetFrostTablePerviousRoad(urbanxx, c_loc(in_frost_table_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    call UrbanSetZwtPerchedPerviousRoad(urbanxx, c_loc(in_zwt_perched_perv), &
+         num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
     ! Compute surface runoff
     call UrbanComputeSurfaceRunoff(urbanxx, real(dtime, c_double), status)
