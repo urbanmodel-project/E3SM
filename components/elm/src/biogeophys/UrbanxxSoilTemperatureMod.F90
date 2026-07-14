@@ -392,6 +392,7 @@ contains
           write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
           write(iulog,'(A,I0,A,I0,A,I0,A,I0)') '  column=', c, ', landunit=', idx_landunit, &
                ', packed_index=', column_packed_idx, ', column_type=', col_pp%itype(c)
+          write(iulog,'(A,I0)') '  ELM snl (snow layers) =', col_pp%snl(c)
           write(iulog,'(A,ES24.16)') '  ELM qflx_snomelt      =', flux_elm_value
           write(iulog,'(A,ES24.16)') '  URBANxx QflxSnowMelt  =', flux_urbanxx_value
           write(iulog,'(A,ES24.16)') '  signed difference     =', flux_signed_diff
