@@ -29,6 +29,21 @@ module UrbanxxSurfaceTempSyncMod
   ! UrbanHeatDiffusion.cpp (after ComputeHeatDiffusion re-derives it from
   ! current state), never by urbanxx_surfaceFluxes.
   !
+  ! Second call site (Phase 6, added once seasonal-cycle validation found
+  ! the urbanxx_netLongwave check failing at the first timestep after real
+  ! snow-layer restructuring): elm_driver.F90 calls this routine AGAIN right
+  ! after HydrologyNoDrainage, which is where ELM performs its OWN last
+  ! t_grnd(c) update for the timestep (HydrologyNoDrainageMod.F90, after
+  ! CombineSnowLayers/DivideSnowLayers may have merged/split snow layers).
+  ! Without this second call, EffectiveSurfTemp would carry the
+  ! PRE-restructuring value set by ComputeHeatDiffusion (step 3) forward into
+  ! the NEXT timestep's urbanxx_netLongwave — which runs before the first
+  ! call site (after CanopyTemperature) fires again — reading a stale
+  ! topmost-layer temperature ELM has already moved on from. Both call sites
+  ! push the same thing (col_es%t_grnd for roof/impervious/pervious road);
+  ! this routine doesn't need to know which point in the timestep it's being
+  ! called from.
+  !
   ! Walls (sunlit/shaded) are deliberately excluded: they never accumulate
   ! snow (see the scoping doc's resolved "which surfaces accumulate
   ! multi-layer snow" question), so their EffectiveSurfTemp is unaffected by

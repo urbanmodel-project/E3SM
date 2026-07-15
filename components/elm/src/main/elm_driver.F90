@@ -967,6 +967,20 @@ contains
             atm2lnd_vars, ocn2lnd_vars, lnd2atm_vars, soilstate_vars,        &
             energyflux_vars, soilhydrology_vars, aerosol_vars )
 
+       ! Multi-layer snow port, Phase 4/6: second sync of the timestep.
+       ! HydrologyNoDrainage just finalized ELM's t_grnd(c) (its LAST update
+       ! for this timestep, after CombineSnowLayers/DivideSnowLayers may have
+       ! restructured the snow-layer stack) — re-sync EffectiveSurfTemp here
+       ! too, or URBANxx would carry the PRE-restructuring value (set by
+       ! ComputeHeatDiffusion, step 3, above) forward into next timestep's
+       ! urbanxx_netLongwave, which runs before any resync happens again.
+       ! See UrbanxxSurfaceTempSyncMod.F90 and the scoping doc's Phase 6
+       ! netLongwave-mismatch-at-timestep-124 root cause.
+       if (use_urbanxx) then
+          call urbanxx_syncSurfaceTemp(filter(nc)%num_urbanl, &
+               filter(nc)%num_urbanc, filter(nc)%urbanc)
+       end if
+
        !  Calculate column-integrated aerosol masses, and
        !  mass concentrations for radiative calculations and output
        !  (based on new snow level state, after SnowFilter is rebuilt.

@@ -63,6 +63,16 @@ contains
     call UrbanComputeSnowLayerDivide(urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+    ! Phase 6 fix (netLongwave-mismatch-at-timestep-124 root cause): neither
+    ! SnowCompaction nor Combine/Divide above ever touch the scalar
+    ! SnowDepth view URBANxx's ComputeSnowCover/ComputeUpdateSnowFraction
+    ! read for FracSno — resync it here from the just-restructured layer
+    ! thicknesses, mirroring ELM's own snow_depth(c) recompute inside
+    ! CombineSnowLayers. See UrbanSnowCombineLayers.cpp for the full
+    ! explanation.
+    call UrbanSyncSnowDepthFromLayers(urbanxx, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
   end subroutine urbanxx_snowCombineDivide
 
   !-----------------------------------------------------------------------
