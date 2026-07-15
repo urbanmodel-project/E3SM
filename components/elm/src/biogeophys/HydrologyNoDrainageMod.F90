@@ -80,6 +80,9 @@ contains
     use UrbanxxInfiltrationMod   , only : urbanxx_infiltration, urbanxx_infiltration_check
     use UrbanxxWaterTableMod     , only : urbanxx_waterTable, urbanxx_waterTable_check, &
                                           urbanxx_dewCondensation, urbanxx_dewCondensation_check
+    use UrbanxxSnowWaterMod      , only : urbanxx_snowWater, urbanxx_snowWater_check
+    use UrbanxxSnowCompactionMod , only : urbanxx_snowCompaction, urbanxx_snowCompaction_check
+    use UrbanxxSnowCombineDivideMod , only : urbanxx_snowCombineDivide, urbanxx_snowCombineDivide_check
     use SoilWaterRetentionCurveMod, only : soil_water_retention_curve_type
     use elm_varctl           , only : use_vsfm
     use elm_varctl           , only : use_urbanxx
@@ -189,8 +192,20 @@ contains
 
       ! Determine the change of snow mass and the snow water onto soil
 
+      if (use_urbanxx) then
+         ! Multi-layer snow port, Phase 2 (SnowWater mass-balance port): seed
+         ! fresh liquid/ice/dz (post-Phasechange_beta) and run URBANxx's own
+         ! SnowWater, BEFORE ELM's native SnowWater() runs on the same state.
+         ! See UrbanxxSnowWaterMod.F90.
+         call urbanxx_snowWater(num_urbanl, num_urbanc, filter_urbanc, bounds%begc, dtime)
+      end if
+
       call SnowWater(bounds, num_snowc, filter_snowc, num_nosnowc, filter_nosnowc, &
            atm2lnd_vars, aerosol_vars)
+
+      if (use_urbanxx) then
+         call urbanxx_snowWater_check(num_urbanl, num_urbanc, filter_urbanc, bounds%begc)
+      end if
 
       ! mapping soilmoist from CLM to VIC layers for runoff calculations
       if (use_vichydro) then
@@ -343,7 +358,27 @@ contains
       end if
       
       ! Natural compaction and metamorphosis.
+      if (use_urbanxx) then
+         ! Multi-layer snow port, Phase 2 (SnowCompaction port): seed
+         ! imelt/frac_iceold and run URBANxx's own SnowCompaction, continuing
+         ! from the liquid/ice/dz state ComputeSnowWater already evolved
+         ! earlier this timestep. See UrbanxxSnowCompactionMod.F90.
+         call urbanxx_snowCompaction(num_urbanl, num_urbanc, filter_urbanc, bounds%begc, dtime)
+      end if
+
       call SnowCompaction(bounds, num_snowc, filter_snowc, top_as, dtime)
+
+      if (use_urbanxx) then
+         call urbanxx_snowCompaction_check(num_urbanl, num_urbanc, filter_urbanc, bounds%begc)
+      end if
+
+      ! Multi-layer snow port, Phase 3 (CombineSnowLayers/DivideSnowLayers
+      ! port): run URBANxx's own layer-count evolution, continuing from the
+      ! liquid/ice/dz/active-count state ComputeSnowCompaction already
+      ! evolved earlier this timestep. See UrbanxxSnowCombineDivideMod.F90.
+      if (use_urbanxx) then
+         call urbanxx_snowCombineDivide(num_urbanl)
+      end if
 
       ! Combine thin snow elements
       call CombineSnowLayers(bounds, num_snowc, filter_snowc, &
@@ -357,7 +392,11 @@ contains
          call DivideExtraSnowLayers(bounds, num_snowc, filter_snowc, &
               aerosol_vars,  is_lake=.false.)
       endif
-      
+
+      if (use_urbanxx) then
+         call urbanxx_snowCombineDivide_check(num_urbanl, num_urbanc, filter_urbanc, bounds%begc)
+      end if
+
       ! Set empty snow layers to zero
       do j = -nlevsno+1,0
          do fc = 1, num_snowc

@@ -1187,6 +1187,7 @@ contains
     use UrbanxxSurfaceFluxesMod  , only : urbanxx_surfaceFluxes_init
     use UrbanxxSoilTemperatureMod, only : urbanxx_soilTemperature_init
     use UrbanxxSoilWaterMod      , only : urbanxx_soilWater_init
+    use UrbanxxSnowLayerMod      , only : urbanxx_snowLayer_init
     use UrbanxxSoilFluxesMod     , only : urbanxx_soilFluxes_init
     use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing_init
     use UrbanxxSurfaceRunoffMod  , only : urbanxx_surfaceRunoff_init
@@ -1265,6 +1266,7 @@ contains
         call urbanxx_surfaceFluxes_init(filter(nc)%num_urbanl)
         call urbanxx_soilTemperature_init(filter(nc)%num_urbanl)
         call urbanxx_soilWater_init(filter(nc)%num_urbanl)
+        call urbanxx_snowLayer_init(filter(nc)%num_urbanl)
         call urbanxx_soilFluxes_init(filter(nc)%num_urbanl)
         call urbanxx_SetAtmosphericForcing_init(filter(nc)%num_urbanl)
         call urbanxx_surfaceRunoff_init(filter(nc)%num_urbanl)

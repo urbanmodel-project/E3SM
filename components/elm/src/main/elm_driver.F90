@@ -190,6 +190,7 @@ module elm_driver
   use UrbanxxNetShortwaveMod      , only : urbanxx_netShortwave, urbanxx_netShortwave_check
   use UrbanxxNetLongwaveMod       , only : urbanxx_netLongwave
   use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
+  use UrbanxxSurfaceTempSyncMod   , only : urbanxx_syncSurfaceTemp
   use UrbanxxSoilFluxesMod        , only : urbanxx_soilFluxes, urbanxx_soilFluxes_check
   use UrbanxxSnowMod              , only : urbanxx_updateSnowFraction
   !
@@ -819,6 +820,16 @@ contains
        call t_stopf('canflux')
 
        ! Fluxes for all urban landunits
+
+       ! Multi-layer snow port, Phase 4: sync URBANxx's EffectiveSurfTemp to
+       ! ELM's just-recomputed t_grnd (CanopyTemperature, above) before
+       ! urbanxx_surfaceFluxes reads it below — closes Known Gap #1 (see
+       ! UrbanxxSurfaceTempSyncMod.F90 for why this call site, here,
+       ! specifically).
+       if (use_urbanxx) then
+          call urbanxx_syncSurfaceTemp(filter(nc)%num_urbanl, &
+               filter(nc)%num_urbanc, filter(nc)%urbanc)
+       end if
 
        call t_startf('uflux')
        call UrbanFluxes(bounds_clump,                        &

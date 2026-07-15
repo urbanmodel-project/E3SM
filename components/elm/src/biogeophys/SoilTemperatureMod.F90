@@ -182,6 +182,8 @@ contains
     use landunit_varcon          , only : istwet, istice, istice_mec, istsoil, istcrop
     use BandDiagonalMod          , only : BandDiagonal
     use UrbanxxSoilTemperatureMod , only : urbanxx_soilTemperature, urbanxx_soilTemperature_check
+    use UrbanxxSnowLayerMod       , only : urbanxx_snowLayer, urbanxx_snowLayer_check
+    use UrbanxxSnowTemperatureMod , only : urbanxx_snowTemperatureSeed, urbanxx_snowTemperature_check
     use elm_varctl               , only : use_urbanxx
 
     !
@@ -510,8 +512,23 @@ contains
       ! Solve temperature for lake + urban column
       !
       if (use_urbanxx) then
+         ! Multi-layer snow port, Phase 4: seed NumberOfActiveSnowLayers/
+         ! Temp/Liq/Ice/Dz from ELM's CURRENT state (including any snow
+         ! layer CanopyHydrology created earlier this same timestep)
+         ! BEFORE urbanxx_soilTemperature, so its internal
+         ! ComputeHeatDiffusion combined snow+soil solve sees fresh input.
+         ! See UrbanxxSnowTemperatureMod.F90.
+         call urbanxx_snowTemperatureSeed(num_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, bounds%begc)
          call urbanxx_soilTemperature(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
               filter_nolakec_and_urbanc, temperature_vars)
+         ! Multi-layer snow port, Phase 1 (data model + plumbing only, no
+         ! physics): seed + round-trip readback of ELM's current
+         ! NumberOfActiveSnowLayers/Dz/Zc (Temp/Liq/Ice moved to
+         ! UrbanxxSnowTemperatureMod.F90 above/below — see that module's
+         ! header comment for why). See UrbanxxSnowLayerMod.F90.
+         call urbanxx_snowLayer(num_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, bounds%begc)
       end if
 
       urban_column = .true.
@@ -651,6 +668,13 @@ contains
       if (use_urbanxx) then
          call urbanxx_soilTemperature_check(num_urbanl, filter_urbanl, num_nolakec_and_urbanc, &
               filter_nolakec_and_urbanc, temperature_vars)
+         call urbanxx_snowLayer_check(num_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, bounds%begc)
+         ! Multi-layer snow port, Phase 4: real physics-parity check of
+         ! URBANxx's post-solve snow-layer temp/liq/ice against ELM's
+         ! independently post-solve values. See UrbanxxSnowTemperatureMod.F90.
+         call urbanxx_snowTemperature_check(num_urbanl, num_nolakec_and_urbanc, &
+              filter_nolakec_and_urbanc, bounds%begc)
       end if
 
       do fc = 1,num_nolakec
