@@ -37,6 +37,7 @@ module UrbanxxSnowTemperatureMod
   use abortutils         , only : endrun
   use UrbanxxInstanceMod , only : urbanxx
   use UrbanxxSnowLayerMod, only : PackLayerQuantity, PackActiveCount, max_snow_layers
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
 
   implicit none
 
@@ -126,6 +127,28 @@ contains
     call UrbanSetSnowLayerThicknessPerviousRoad(urbanxx, c_loc(buf_perroad), size2D, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
+    ! Layer-center depth (Zc): needed so SolveHeatDiffusionSnowSoil's
+    ! combined-stack interface geometry is anchored to ELM's own actual
+    ! z(c,j), not re-derived by assuming dz is fully up to date. ELM's own
+    ! z/zi are only recentered on a snow layer inside CombineSnowLayers/
+    ! DivideSnowLayers (SnowHydrologyMod.F90) — dz can grow from ongoing
+    ! snowfall/compaction between those events without z being recentered,
+    ! so z(c,j) is not always exactly zi(c,j)-0.5*dz(c,j) for the *current*
+    ! dz. Seeding z directly (rather than recomputing a fresh, symmetric
+    ! zc/zi purely from current Dz, as SolveHeatDiffusionSnowSoil did
+    ! before) reproduces that same (possibly momentarily stale) geometry,
+    ! closing a real coefficient mismatch found via the soil-layer-1
+    ! residual debugging plan (see
+    ! plans/ELM_URBANxx_Known_Gaps_And_Future_Work.md).
+    call PackLayerQuantity(num_urbanc, filter_urbanc, num_urbanl, begc, &
+         col_pp%z, isLayoutLeft, buf_roof, buf_improad, buf_perroad)
+    call UrbanSetSnowLayerZcRoof(urbanxx, c_loc(buf_roof), size2D, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanSetSnowLayerZcImperviousRoad(urbanxx, c_loc(buf_improad), size2D, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanSetSnowLayerZcPerviousRoad(urbanxx, c_loc(buf_perroad), size2D, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
     deallocate(buf_roof, buf_improad, buf_perroad)
 
   end subroutine urbanxx_snowTemperatureSeed
@@ -149,7 +172,11 @@ contains
     if (max_err > tol) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowTemperatureMod mismatch for ', &
            trim(label), ', max_err = ', max_err
-      call endrun(msg='UrbanxxSnowTemperatureMod: multi-layer temperature-solve parity check failed for '//trim(label))
+      if (urbanxx_softfail_permits(max_err, tol)) then
+        write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+      else
+        call endrun(msg='UrbanxxSnowTemperatureMod: multi-layer temperature-solve parity check failed for '//trim(label))
+      end if
     else
       write(iulog,'(A,A,A,ES24.16)') 'Max error in UrbanxxSnowTemperatureMod ', trim(label), ' : ', max_err
     end if

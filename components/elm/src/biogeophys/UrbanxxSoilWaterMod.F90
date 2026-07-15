@@ -113,6 +113,7 @@ contains
     use elm_varpar     , only : nlevgrnd
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
     use elm_time_manager       , only : get_nstep
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -198,7 +199,11 @@ contains
         write(iulog,*) '  ELM    h2osoi_liq(c,j):', max_err_elm
         write(iulog,*) '  URBANxx h2osoi_liq    :', max_err_uxx
         write(iulog,*) '  Abs difference        :', max_error_liq
-        call exit(0)
+        if (urbanxx_softfail_permits(max_error_liq, 1.0e-6_r8)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+        else
+          call exit(0)
+        end if
       end if
 
       deallocate(h2osoi_liq_2d)

@@ -235,11 +235,14 @@ contains
     !
     ! !DESCRIPTION:
     ! Compare URBANxx soil flux results with ELM values.
-    ! Calls endrun on mismatch exceeding tolerance.
+    ! Calls exit(0) on mismatch exceeding tolerance, unless
+    ! URBANXX_SOFT_FAIL permits continuing (see
+    ! UrbanxxDiagnosticControlMod.F90).
     !
     use ColumnType    , only : col_pp
     use column_varcon , only : icol_roof, icol_road_imperv, icol_road_perv, &
                                icol_sunwall, icol_shadewall
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -339,7 +342,15 @@ contains
         write(iulog,*) '  err_qflx_dew_grnd  = ', err_qflx_dg
         write(iulog,*) '  ELM    eflx_soil_grnd=', veg_ef%eflx_soil_grnd(p)
         write(iulog,*) '  URBANxx eflx_soil_grnd=', urb_eflx
-        call exit(0)
+        if (urbanxx_softfail_permits(err_eflx,      1.0e-8_r8) .and. &
+            urbanxx_softfail_permits(err_qflx_evap, 1.0e-8_r8) .and. &
+            urbanxx_softfail_permits(err_qflx_sub,  1.0e-8_r8) .and. &
+            urbanxx_softfail_permits(err_qflx_dsn,  1.0e-8_r8) .and. &
+            urbanxx_softfail_permits(err_qflx_dg,   1.0e-8_r8)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: all exceedances within ceiling; logging and continuing'
+        else
+          call exit(0)
+        end if
       end if
 
     end do

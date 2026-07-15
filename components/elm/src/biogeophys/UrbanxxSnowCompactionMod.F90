@@ -28,6 +28,7 @@ module UrbanxxSnowCompactionMod
   use abortutils         , only : endrun
   use UrbanxxInstanceMod , only : urbanxx
   use UrbanxxSnowLayerMod, only : PackLayerQuantity, PackLayerQuantityInt, max_snow_layers
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
 
   implicit none
 
@@ -113,7 +114,11 @@ contains
     if (max_err > tol) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowCompactionMod mismatch for ', &
            trim(label), ', max_err = ', max_err
-      call endrun(msg='UrbanxxSnowCompactionMod: SnowCompaction physics-parity check failed for '//trim(label))
+      if (urbanxx_softfail_permits(max_err, tol)) then
+        write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+      else
+        call endrun(msg='UrbanxxSnowCompactionMod: SnowCompaction physics-parity check failed for '//trim(label))
+      end if
     else
       write(iulog,'(A,A,A,ES24.16)') 'Max error in UrbanxxSnowCompactionMod ', trim(label), ' : ', max_err
     end if

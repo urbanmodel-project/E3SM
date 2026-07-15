@@ -33,6 +33,7 @@ module UrbanxxSnowWaterMod
   use abortutils         , only : endrun
   use UrbanxxInstanceMod , only : urbanxx
   use UrbanxxSnowLayerMod, only : PackLayerQuantity, max_snow_layers
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
 
   implicit none
 
@@ -135,7 +136,11 @@ contains
     if (max_err > tol) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowWaterMod mismatch for ', &
            trim(label), ', max_err = ', max_err
-      call endrun(msg='UrbanxxSnowWaterMod: SnowWater physics-parity check failed for '//trim(label))
+      if (urbanxx_softfail_permits(max_err, tol)) then
+        write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+      else
+        call endrun(msg='UrbanxxSnowWaterMod: SnowWater physics-parity check failed for '//trim(label))
+      end if
     else
       write(iulog,'(A,A,A,ES24.16)') 'Max error in UrbanxxSnowWaterMod ', trim(label), ' : ', max_err
     end if

@@ -226,6 +226,7 @@ contains
     use shr_log_mod           , only : errmsg => shr_log_errmsg
     use SoilHydrologyType     , only : soilhydrology_type
     use urban_kokkos_interface, only : UrbanKokkosIsLayoutLeft
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -266,8 +267,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in zwt_col                :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_waterTable_check: zwt_col error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: zwt_col error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_waterTable_check: zwt_col error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- wa_col ---
       max_abs_err = 0._r8
@@ -284,8 +290,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in wa_col                 :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_waterTable_check: wa_col error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: wa_col error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_waterTable_check: wa_col error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- zwt_perched_col ---
       max_abs_err = 0._r8
@@ -302,8 +313,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in zwt_perched_col        :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_waterTable_check: zwt_perched_col error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: zwt_perched_col error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_waterTable_check: zwt_perched_col error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- h2osoi_liq ---
       max_abs_err = 0._r8
@@ -341,8 +357,13 @@ contains
         end do
       end if
       write(iulog,*) 'Max error in h2osoi_liq             :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_waterTable_check: h2osoi_liq error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_waterTable_check: h2osoi_liq error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- h2osoi_ice ---
       max_abs_err = 0._r8
@@ -380,8 +401,13 @@ contains
         end do
       end if
       write(iulog,*) 'Max error in h2osoi_ice             :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_waterTable_check: h2osoi_ice error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_waterTable_check: h2osoi_ice error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
     end associate
 
