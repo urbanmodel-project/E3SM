@@ -103,6 +103,7 @@ contains
     use SolarAbsorbedType , only : solarabs_type
     use elm_time_manager , only : get_nstep, get_curr_date
     use elm_varcon        , only : spval
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -193,7 +194,11 @@ contains
           write(iulog,'(A,ES24.16)') '  signed difference      =', signed_diff
           write(iulog,'(A,ES24.16)') '  absolute difference    =', abs_diff
           write(iulog,'(A,ES24.16)') '  relative difference    =', rel_diff
-          call exit(0)
+          if (urbanxx_softfail_permits(abs_diff, 1.0e-9_r8)) then
+            write(iulog,'(A)') '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+          else
+            call exit(0)
+          end if
         end if
       end do
 

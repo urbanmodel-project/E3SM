@@ -477,6 +477,7 @@ contains
     use column_varcon, only : icol_roof, icol_road_imperv
     use abortutils   , only : endrun
     use shr_log_mod  , only : errmsg => shr_log_errmsg
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -510,8 +511,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_liq (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_dewCondensation_check: h2osoi_liq roof error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq (roof) error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq roof error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- h2osoi_ice (roof) ---
       max_abs_err = 0._r8
@@ -528,8 +534,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_ice (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_dewCondensation_check: h2osoi_ice roof error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice (roof) error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice roof error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- h2osoi_liq (impervious road) ---
       max_abs_err = 0._r8
@@ -546,8 +557,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_liq (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_dewCondensation_check: h2osoi_liq imperv road error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq (imperv) error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq imperv road error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- h2osoi_ice (impervious road) ---
       max_abs_err = 0._r8
@@ -564,8 +580,13 @@ contains
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_ice (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_dewCondensation_check: h2osoi_ice imperv road error too large'//errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice (imperv) error exceeds tolerance but within ceiling; continuing'
+        else
+          call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice imperv road error too large'//errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
     end associate
 

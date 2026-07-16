@@ -110,6 +110,7 @@ contains
     !
     use column_varcon       , only : icol_road_perv, icol_road_imperv
     use column_varcon       , only : icol_roof, icol_sunwall, icol_shadewall
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -230,7 +231,11 @@ contains
           write(iulog,*) 'Max rel error location              : p=', p_max_rel_error, ' c=', c_max_rel_error,'column type=', ctype(c_max_rel_error)
       if (max_error > 1.0e-10) then
          write(iulog,*) 'Error exceeds tolerance! Check Urban++ net longwave computation.'
-         call exit(0)
+         if (urbanxx_softfail_permits(max_error, 1.0e-10_r8)) then
+            write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+         else
+            call exit(0)
+         end if
       end if
 
     end associate

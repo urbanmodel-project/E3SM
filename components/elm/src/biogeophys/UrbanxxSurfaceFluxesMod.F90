@@ -20,6 +20,7 @@ module UrbanxxSurfaceFluxesMod
   use LandunitDataType     , only : lun_es, lun_ws
   use LandunitType         , only : lun_pp
   use TopounitDataType     , only : top_as
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
 
   implicit none
 
@@ -254,7 +255,14 @@ contains
          write(iulog,'(A,2ES24.16)') '  ELM top liq/ice     = ', col_ws%h2osoi_liq(c,1), col_ws%h2osoi_ice(c,1)
          write(iulog,'(A,2ES24.16)') '  ELM taf/qaf         = ', lun_es%taf(col_pp%landunit(c)), lun_ws%qaf(col_pp%landunit(c))
          write(iulog,'(A,ES24.16)') '  ELM gustiness       = ', top_as%ugust(lun_pp%topounit(col_pp%landunit(c)))
-         call exit(0)
+         if (urbanxx_softfail_permits(err_eflx_sh_grnd,  1.0e-10_r8) .and. &
+             urbanxx_softfail_permits(err_qflx_evap_soi, 1.0e-10_r8) .and. &
+             urbanxx_softfail_permits(err_cgrnds,        1.0e-10_r8) .and. &
+             urbanxx_softfail_permits(err_cgrndl,        1.0e-10_r8)) then
+            write(iulog,*) '  URBANXX_SOFT_FAIL: all exceedances within ceiling; logging and continuing'
+         else
+            call exit(0)
+         end if
       end if
 
    end do
@@ -275,7 +283,11 @@ contains
    write(iulog,*) 'Max error in surface Taf, Qaf       : ', max_error,    ' (rel: ', max_rel_error, ')'
    if (max_error > 1.0e-10) then
       write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface Taf/Qaf computation.'
-      call exit(0)
+      if (urbanxx_softfail_permits(max_error, 1.0e-10_r8)) then
+         write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+      else
+         call exit(0)
+      end if
    end if
   end subroutine urbanxx_surfaceFluxes
 

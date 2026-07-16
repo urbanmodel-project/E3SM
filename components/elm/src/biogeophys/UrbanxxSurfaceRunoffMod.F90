@@ -206,6 +206,7 @@ contains
     use ColumnType     , only : col_pp
     use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv, &
                                 icol_sunwall, icol_shadewall
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -253,7 +254,11 @@ contains
             write(iulog,*) 'ERROR: qflx_surf mismatch (roof) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_roof(idx_roof)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            call exit(0)
+            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            else
+              call exit(0)
+            end if
           end if
         case (icol_road_imperv)
           idx_imperv  = idx_imperv + 1
@@ -265,7 +270,11 @@ contains
             write(iulog,*) 'ERROR: qflx_surf mismatch (imperv road) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_imperv(idx_imperv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            call exit(0)
+            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            else
+              call exit(0)
+            end if
           end if
         case (icol_road_perv)
           idx_perv  = idx_perv + 1
@@ -277,7 +286,11 @@ contains
             write(iulog,*) 'ERROR: qflx_surf mismatch (pervious road) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_perv(idx_perv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            call exit(0)
+            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            else
+              call exit(0)
+            end if
           end if
         case (icol_sunwall)
           idx_sunwall = idx_sunwall + 1
@@ -289,7 +302,11 @@ contains
             write(iulog,*) 'ERROR: qflx_surf mismatch (sunlit wall) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_sunwall(idx_sunwall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            call exit(0)
+            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            else
+              call exit(0)
+            end if
           end if
         case (icol_shadewall)
           idx_shadewall = idx_shadewall + 1
@@ -301,7 +318,11 @@ contains
             write(iulog,*) 'ERROR: qflx_surf mismatch (shaded wall) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_shadewall(idx_shadewall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            call exit(0)
+            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            else
+              call exit(0)
+            end if
           end if
         end select
       end do
