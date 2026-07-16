@@ -422,6 +422,9 @@ module elm_varctl
   ! URBANxx switches
   !----------------------------------------------------------
   logical          , public :: use_urbanxx                 = .false.
+  logical          , public :: urbanxx_softfail            = .false.
+  real(r8)         , public :: urbanxx_softfail_ceiling_factor = 1.0e6_r8
+  logical          , public :: urbanxx_always_continue     = .false.
 
   !----------------------------------------------------------
   ! VSFM switches

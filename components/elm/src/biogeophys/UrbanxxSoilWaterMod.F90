@@ -200,7 +200,7 @@ contains
         write(iulog,*) '  URBANxx h2osoi_liq    :', max_err_uxx
         write(iulog,*) '  Abs difference        :', max_error_liq
         if (urbanxx_softfail_permits(max_error_liq, 1.0e-6_r8)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
         else
           call exit(0)
         end if

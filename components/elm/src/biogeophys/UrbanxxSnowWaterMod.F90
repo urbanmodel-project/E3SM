@@ -137,7 +137,7 @@ contains
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowWaterMod mismatch for ', &
            trim(label), ', max_err = ', max_err
       if (urbanxx_softfail_permits(max_err, tol)) then
-        write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+        write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
       else
         call endrun(msg='UrbanxxSnowWaterMod: SnowWater physics-parity check failed for '//trim(label))
       end if

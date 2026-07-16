@@ -115,6 +115,7 @@ contains
     use column_varcon     , only : icol_road_perv
     use abortutils        , only : endrun
     use shr_log_mod       , only : errmsg => shr_log_errmsg
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -152,9 +153,15 @@ contains
          write(iulog,*) 'Max error in qflx_drain             :', &
              max_abs_err, '  (rel:', max_rel_err, ')'
       end if
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_drainage_check: qflx_drain error too large'// &
-           errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANxx check failure permitted to continue: qflx_drain error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
+        else
+          call endrun( &
+               msg='urbanxx_drainage_check: qflx_drain error too large'// &
+               errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
       ! --- qflx_rsub_sat ---
       max_abs_err = 0._r8
@@ -174,9 +181,15 @@ contains
         write(iulog,*) 'Max error in qflx_rsub_sat           :', &
              max_abs_err, '  (rel:', max_rel_err, ')'
       end if
-      if (max_abs_err > tol) call endrun( &
-           msg='urbanxx_drainage_check: qflx_rsub_sat error too large'// &
-           errmsg(__FILE__,__LINE__))
+      if (max_abs_err > tol) then
+        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+          write(iulog,*) '  URBANxx check failure permitted to continue: qflx_rsub_sat error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
+        else
+          call endrun( &
+               msg='urbanxx_drainage_check: qflx_rsub_sat error too large'// &
+               errmsg(__FILE__,__LINE__))
+        end if
+      end if
 
     end associate
 

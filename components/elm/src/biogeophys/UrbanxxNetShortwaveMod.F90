@@ -195,7 +195,7 @@ contains
           write(iulog,'(A,ES24.16)') '  absolute difference    =', abs_diff
           write(iulog,'(A,ES24.16)') '  relative difference    =', rel_diff
           if (urbanxx_softfail_permits(abs_diff, 1.0e-9_r8)) then
-            write(iulog,'(A)') '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)
           end if

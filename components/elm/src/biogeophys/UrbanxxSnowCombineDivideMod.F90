@@ -98,7 +98,12 @@ contains
     if (max_err > 0._r8) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowCombineDivideMod mismatch for ', &
            trim(label), ', max_err = ', max_err
-      call endrun(msg='UrbanxxSnowCombineDivideMod: active-layer-count parity check failed for '//trim(label))
+      if (urbanxx_softfail_permits(max_err, 0._r8)) then
+        write(iulog,*) '  URBANxx check failure permitted to continue: '//trim(label)// &
+             ' active-layer-count mismatch (urbanxx_softfail/urbanxx_always_continue); continuing'
+      else
+        call endrun(msg='UrbanxxSnowCombineDivideMod: active-layer-count parity check failed for '//trim(label))
+      end if
     else
       write(iulog,'(A,A,A,ES24.16)') 'Max error in UrbanxxSnowCombineDivideMod ', trim(label), ' : ', max_err
     end if
@@ -125,7 +130,7 @@ contains
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowCombineDivideMod mismatch for ', &
            trim(label), ', max_err = ', max_err
       if (urbanxx_softfail_permits(max_err, tol)) then
-        write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+        write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
       else
         call endrun(msg='UrbanxxSnowCombineDivideMod: Combine/Divide physics-parity check failed for '//trim(label))
       end if

@@ -385,7 +385,7 @@ contains
           write(iulog,'(A,3ES24.16)') '  ELM flux deriv/state  =', eflx_dhsdT(c), eflx_hs_top_snow(c), htvp(c)
           write(iulog,'(A,ES24.16)') '  ELM sabg_lyr top      =', eflx_sabg_lyr(c,1)
           if (urbanxx_softfail_permits(column_max_error, 1.0e-9_r8)) then
-            write(iulog,'(A)') '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)
           endif
@@ -406,7 +406,7 @@ contains
           write(iulog,'(A,3ES24.16)') '  ELM snow state        =', h2osno(c), snow_depth(c), frac_sno(c)
           write(iulog,'(A,2ES24.16)') '  ELM top liq/ice       =', h2osoi_liq(c,1), h2osoi_ice(c,1)
           if (urbanxx_softfail_permits(column_flux_error, 1.0e-9_r8)) then
-            write(iulog,'(A)') '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+            write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)
           endif

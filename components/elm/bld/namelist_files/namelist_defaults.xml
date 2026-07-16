@@ -122,6 +122,9 @@ attributes from the config_cache.xml file (with keys converted to upper-case).
 <!-- URBANxx default                                                                           -->
 <!-- ========================================================================================  -->
 <use_urbanxx>.false.</use_urbanxx>
+<urbanxx_softfail>.false.</urbanxx_softfail>
+<urbanxx_softfail_ceiling_factor>1.0e6</urbanxx_softfail_ceiling_factor>
+<urbanxx_always_continue>.false.</urbanxx_always_continue>
 
 <!-- ================================================================== -->
 <!-- The default filenames are given relative to the root directory

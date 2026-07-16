@@ -259,7 +259,7 @@ contains
              urbanxx_softfail_permits(err_qflx_evap_soi, 1.0e-10_r8) .and. &
              urbanxx_softfail_permits(err_cgrnds,        1.0e-10_r8) .and. &
              urbanxx_softfail_permits(err_cgrndl,        1.0e-10_r8)) then
-            write(iulog,*) '  URBANXX_SOFT_FAIL: all exceedances within ceiling; logging and continuing'
+            write(iulog,*) '  URBANxx check failure permitted to continue: all exceedances (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
          else
             call exit(0)
          end if
@@ -284,7 +284,7 @@ contains
    if (max_error > 1.0e-10) then
       write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface Taf/Qaf computation.'
       if (urbanxx_softfail_permits(max_error, 1.0e-10_r8)) then
-         write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+         write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
       else
          call exit(0)
       end if

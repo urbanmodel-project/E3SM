@@ -81,6 +81,7 @@ contains
     !
     use ColumnType     , only : col_pp
     use column_varcon  , only : icol_road_perv
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
     !
     implicit none
     !
@@ -112,7 +113,11 @@ contains
           if (max_abs_err > 1.0e-9_r8) then
             write(iulog,*)'Max error in qflx_infl: ', max_abs_err, ' at column ', c, &
                  ' itype = ', col_pp%itype(c), ' exceeds tolerance'
-            call exit(0)
+            if (urbanxx_softfail_permits(max_abs_err, 1.0e-9_r8)) then
+              write(iulog,*) '  URBANxx check failure permitted to continue: qflx_infl error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
+            else
+              call exit(0)
+            end if
           end if
         end if
       end do

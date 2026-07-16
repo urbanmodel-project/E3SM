@@ -2128,6 +2128,27 @@ Runtime flag to turn on/off PETSc based thermal model.
 Runtime flag to turn on/off URBANxx.
 </entry>
 
+<entry id="urbanxx_softfail" type="logical" category="default_settings"
+        group="elm_inparm" valid_values="">
+Runtime flag to enable URBANxx's bounded soft-fail mode: a physics-parity
+check that exceeds tolerance logs a warning and continues instead of
+aborting, as long as the exceedance is within
+urbanxx_softfail_ceiling_factor times the check's own tolerance.
+</entry>
+
+<entry id="urbanxx_softfail_ceiling_factor" type="real" category="default_settings"
+        group="elm_inparm" valid_values="">
+Multiplier on a URBANxx physics-parity check's own tolerance above which an
+exceedance still aborts the run even when urbanxx_softfail is enabled.
+</entry>
+
+<entry id="urbanxx_always_continue" type="logical" category="default_settings"
+        group="elm_inparm" valid_values="">
+Runtime flag to make URBANxx physics-parity checks never abort the run,
+regardless of exceedance magnitude: every check logs its error and the run
+always continues to completion.
+</entry>
+
 <!-- ========================================================================================  -->
 <!-- Namelist options for variable soil thickness                                              -->
 <!-- ========================================================================================  -->

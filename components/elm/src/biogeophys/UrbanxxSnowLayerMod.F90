@@ -46,6 +46,7 @@ module UrbanxxSnowLayerMod
   use elm_varctl         , only : iulog
   use abortutils         , only : endrun
   use UrbanxxInstanceMod , only : urbanxx
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
 
   implicit none
 
@@ -475,7 +476,12 @@ contains
     if (max_err > 0._r8) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowLayerMod round-trip mismatch for ', &
            trim(label), ', max_err = ', max_err
-      call endrun(msg='UrbanxxSnowLayerMod: round-trip check failed for '//trim(label))
+      if (urbanxx_softfail_permits(max_err, 0._r8)) then
+        write(iulog,*) '  URBANxx check failure permitted to continue: '//trim(label)// &
+             ' round-trip mismatch (urbanxx_softfail/urbanxx_always_continue); continuing'
+      else
+        call endrun(msg='UrbanxxSnowLayerMod: round-trip check failed for '//trim(label))
+      end if
     end if
 
   end subroutine CheckOne

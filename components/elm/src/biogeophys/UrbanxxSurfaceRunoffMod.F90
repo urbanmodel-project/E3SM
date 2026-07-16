@@ -255,7 +255,7 @@ contains
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_roof(idx_roof)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
             if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
-              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+              write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
             end if
@@ -271,7 +271,7 @@ contains
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_imperv(idx_imperv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
             if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
-              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+              write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
             end if
@@ -287,7 +287,7 @@ contains
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_perv(idx_perv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
             if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
-              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+              write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
             end if
@@ -303,7 +303,7 @@ contains
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_sunwall(idx_sunwall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
             if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
-              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+              write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
             end if
@@ -319,7 +319,7 @@ contains
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_shadewall(idx_shadewall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
             if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
-              write(iulog,*) '  URBANXX_SOFT_FAIL: exceedance within ceiling; logging and continuing'
+              write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
             end if

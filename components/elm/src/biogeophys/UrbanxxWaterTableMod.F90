@@ -269,7 +269,7 @@ contains
       write(iulog,*) 'Max error in zwt_col                :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: zwt_col error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: zwt_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: zwt_col error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -292,7 +292,7 @@ contains
       write(iulog,*) 'Max error in wa_col                 :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: wa_col error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: wa_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: wa_col error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -315,7 +315,7 @@ contains
       write(iulog,*) 'Max error in zwt_perched_col        :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: zwt_perched_col error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: zwt_perched_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: zwt_perched_col error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -359,7 +359,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_liq             :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: h2osoi_liq error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -403,7 +403,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_ice             :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: h2osoi_ice error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -513,7 +513,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_liq (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq (roof) error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq (roof) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq roof error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -536,7 +536,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_ice (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice (roof) error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice (roof) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice roof error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -559,7 +559,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_liq (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_liq (imperv) error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq (imperv) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq imperv road error too large'//errmsg(__FILE__,__LINE__))
         end if
@@ -582,7 +582,7 @@ contains
       write(iulog,*) 'Max error in h2osoi_ice (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
       if (max_abs_err > tol) then
         if (urbanxx_softfail_permits(max_abs_err, tol)) then
-          write(iulog,*) '  URBANXX_SOFT_FAIL: h2osoi_ice (imperv) error exceeds tolerance but within ceiling; continuing'
+          write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice (imperv) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice imperv road error too large'//errmsg(__FILE__,__LINE__))
         end if
