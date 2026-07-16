@@ -192,6 +192,7 @@ module elm_driver
   use UrbanxxSurfaceFluxesMod     , only : urbanxx_surfaceFluxes
   use UrbanxxSurfaceTempSyncMod   , only : urbanxx_syncSurfaceTemp
   use UrbanxxSoilFluxesMod        , only : urbanxx_soilFluxes, urbanxx_soilFluxes_check
+  use UrbanxxEnergyBalanceMod     , only : urbanxx_energyBalance, urbanxx_energyBalance_check
   use UrbanxxSnowMod              , only : urbanxx_updateSnowFraction
   !
   ! !PUBLIC TYPES:
@@ -936,6 +937,10 @@ contains
           call urbanxx_soilFluxes_check( &
                filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
                filter(nc)%num_nolakep, filter(nc)%nolakep)
+          call urbanxx_energyBalance(filter(nc)%num_urbanl)
+          call urbanxx_energyBalance_check( &
+               filter(nc)%num_urbanl,  filter(nc)%urbanl,     &
+               filter(nc)%num_urbanc,  filter(nc)%urbanc)
        end if
 
        ! ============================================================================

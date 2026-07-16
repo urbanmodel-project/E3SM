@@ -24,12 +24,15 @@ module UrbanxxSoilFluxesMod
   real(c_double) , allocatable, target :: in_top_liq_improad(:)
   real(c_double) , allocatable, target :: in_top_ice_improad(:)
 
-  ! Persistent output buffers (allocated once in init)
-  real(c_double) , allocatable, target :: eflx_soil_grnd_roof(:)
-  real(c_double) , allocatable, target :: eflx_soil_grnd_improad(:)
-  real(c_double) , allocatable, target :: eflx_soil_grnd_perroad(:)
-  real(c_double) , allocatable, target :: eflx_soil_grnd_sunwall(:)
-  real(c_double) , allocatable, target :: eflx_soil_grnd_shadwall(:)
+  ! Persistent output buffers (allocated once in init). eflx_soil_grnd_* are
+  ! public so UrbanxxEnergyBalanceMod can reuse them directly (they are
+  ! refreshed by urbanxx_soilFluxes immediately before that module's check
+  ! runs each timestep) instead of re-fetching via a redundant getter call.
+  real(c_double) , allocatable, target, public :: eflx_soil_grnd_roof(:)
+  real(c_double) , allocatable, target, public :: eflx_soil_grnd_improad(:)
+  real(c_double) , allocatable, target, public :: eflx_soil_grnd_perroad(:)
+  real(c_double) , allocatable, target, public :: eflx_soil_grnd_sunwall(:)
+  real(c_double) , allocatable, target, public :: eflx_soil_grnd_shadwall(:)
   real(c_double) , allocatable, target :: qflx_evap_grnd_roof(:)
   real(c_double) , allocatable, target :: qflx_evap_grnd_improad(:)
   real(c_double) , allocatable, target :: qflx_evap_grnd_perroad(:)
