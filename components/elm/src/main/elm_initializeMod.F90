@@ -540,6 +540,8 @@ contains
     use subgridWeightsMod     , only : init_subgrid_weights_mod
     use histFileMod           , only : hist_htapes_build, htapes_fieldlist
     use histFileMod           , only : hist_addfld1d, hist_addfld2d, no_snow_normal
+    use UrbanxxHistMod         , only : urbanxx_hist_init
+    use elm_varctl             , only : urbanxx_output, use_urbanxx
     use restFileMod           , only : restFile_getfile, restFile_open, restFile_close
     use restFileMod           , only : restFile_read, restFile_write
     use accumulMod            , only : print_accum_fields
@@ -711,6 +713,10 @@ contains
          ptr_col=col_pp%zii, default='inactive')
 
     call elm_inst_biogeophys(bounds_proc)
+
+    if (use_urbanxx .and. urbanxx_output) then
+       call urbanxx_hist_init(bounds_proc)
+    end if
 
     if(use_betr)then
       !allocate memory for betr simulator

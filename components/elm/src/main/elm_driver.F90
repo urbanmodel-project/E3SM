@@ -184,6 +184,8 @@ module elm_driver
   use elm_varctl                  , only : budget_ann, budget_ltann, budget_ltend
   use elm_varctl                  , only : use_finetop_rad
   use elm_varctl                  , only : use_urbanxx
+  use UrbanxxHistMod              , only : urbanxx_hist_update
+  use UrbanxxHistMod              , only : urbanxx_hist_update_radiation
 
   use timeinfoMod
   use UrbanxxAtmosphericForcingMod, only : urbanxx_SetAtmosphericForcing
@@ -1050,6 +1052,8 @@ contains
        ! URBANxx: apply same Bonan 1996 formula to internal FracSno
        if (use_urbanxx) then
           call urbanxx_updateSnowFraction(filter(nc)%num_urbanl, filter(nc)%urbanl)
+          call urbanxx_hist_update(filter(nc)%num_urbanl, &
+               filter(nc)%num_urbanc, filter(nc)%urbanc)
        end if
 
        ! ============================================================================
@@ -1487,6 +1491,8 @@ contains
                      filter(nc)%num_urbanp, &
                      filter(nc)%urbanp,     &
                      solarabs_vars)
+                call urbanxx_hist_update_radiation(filter(nc)%num_urbanl, &
+                     filter(nc)%num_urbanc, filter(nc)%urbanc)
              end if
           end if
 
