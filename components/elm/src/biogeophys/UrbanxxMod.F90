@@ -69,6 +69,8 @@ contains
        call UrbanKokkosPrintConfiguration()
     end if
 
+    call CheckBedrockLayerAssumption(num_urbanc, filter_urbanc)
+
     call UrbanCreate(num_urbanl, urbanxx, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
@@ -135,6 +137,42 @@ contains
     ! (init calls moved to elm_initializeMod.F90 to avoid circular dependency)
 
   end subroutine urbanxx_initialize
+
+  !-----------------------------------------------------------------------
+  subroutine CheckBedrockLayerAssumption(num_urbanc, filter_urbanc)
+    !
+    ! URBANxx hardcodes the depth to bedrock for road columns as
+    ! NUM_LAYERS_ABV_BEDROCK = 10 (UrbanConstants.h), used by heat diffusion
+    ! (TK_BEDROCK/CSOL_BEDROCK below it), WaterTable and Drainage. ELM instead
+    ! uses the per-column col_pp%nlevbed, which equals nlevsoi (10) by default
+    ! but varies 5..nlevgrnd per gridcell when use_var_soil_thick=.true. and
+    ! the surface dataset carries aveDTB/zbedrock (initVerticalMod.F90). Abort
+    ! rather than silently diverge in deep-soil thermal properties/hydrology.
+    !
+    use ColumnType    , only : col_pp
+    use column_varcon , only : icol_road_perv, icol_road_imperv
+    implicit none
+    !
+    integer , intent(in) :: num_urbanc       ! number of urban columns in clump
+    integer , intent(in) :: filter_urbanc(:) ! urban column filter
+    !
+    ! Must match NUM_LAYERS_ABV_BEDROCK in urbanxx/include/private/UrbanConstants.h
+    integer , parameter  :: urbanxx_nlevbed = 10
+    integer              :: fc, c
+
+    do fc = 1, num_urbanc
+       c = filter_urbanc(fc)
+       if (col_pp%itype(c) /= icol_road_perv .and. col_pp%itype(c) /= icol_road_imperv) cycle
+       if (col_pp%nlevbed(c) /= urbanxx_nlevbed) then
+          write(iulog,*) 'URBANxx: road column nlevbed differs from URBANxx''s hardcoded value'
+          write(iulog,*) '  c = ', c, ' itype = ', col_pp%itype(c), &
+               ' nlevbed = ', col_pp%nlevbed(c), ' URBANxx expects ', urbanxx_nlevbed
+          write(iulog,*) '  (likely use_var_soil_thick=.true.; URBANxx does not support variable soil thickness)'
+          call endrun(msg='URBANxx: unsupported nlevbed on urban road column '//errMsg(__FILE__, __LINE__))
+       end if
+    end do
+
+  end subroutine CheckBedrockLayerAssumption
 
   !-----------------------------------------------------------------------
   subroutine SetCanyonHwr(urban, num_urbanl, filter_urbanl)

@@ -2149,6 +2149,13 @@ regardless of exceedance magnitude: every check logs its error and the run
 always continues to completion.
 </entry>
 
+<entry id="urbanxx_output" type="logical" category="history"
+        group="elm_inparm" valid_values="">
+Runtime flag to write URBANxx's own state and fluxes (fields suffixed _XX,
+e.g. TSOI_ROOF_XX, NETLW_PERROAD_XX) to ELM history files. Requires
+use_urbanxx = .true.
+</entry>
+
 <!-- ========================================================================================  -->
 <!-- Namelist options for variable soil thickness                                              -->
 <!-- ========================================================================================  -->

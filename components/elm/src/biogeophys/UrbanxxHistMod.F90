@@ -522,6 +522,8 @@ contains
          avgflag='A', long_name='URBANxx pervious road net shortwave radiation (next-timestep)', &
          ptr_col=ptr1d, set_nourb=0._r8, c2l_scale_type='urbanf', default='active')
 
+  end subroutine urbanxx_hist_init
+
   !-----------------------------------------------------------------------
   subroutine urbanxx_hist_update(num_urbanl, num_urbanc, filter_urbanc)
     !
@@ -530,9 +532,14 @@ contains
     ! output arrays registered during urbanxx_hist_init.
     ! No-op when urbanxx_output=.false. or num_urbanl=0.
     !
-    ! Snow-layer indexing: URBANxx 2D index j=1 is the top (surface) layer;
-    ! ELM history levsno index nlevsno is the top layer.
-    ! Mapping: out_sno_*(c, nlevsno - j + 1) = getter_2d(l_packed, j)
+    ! Snow-layer indexing: URBANxx snow layers are bottom-up (j=1, C++
+    ! index 0, is the layer nearest the ground). ELM's levsno history
+    ! dimension maps level k to t_soisno(c, k-nlevsno), so level nlevsno is
+    ! the ground-adjacent layer and the N existing layers occupy the LAST N
+    ! levels (hist_set_snow_field_2d). Hence:
+    ! out_sno_*(c, nlevsno - j + 1) = getter_2d(l_packed, j), j = 1..N
+    ! Levels above the active stack are reset to spval every step so a
+    ! shrinking snowpack does not leave stale values behind.
     !
     use ColumnType    , only : col_pp
     use column_varcon , only : icol_roof, icol_road_imperv, icol_road_perv, &
@@ -870,8 +877,12 @@ contains
         end do
         out_h2osno_roof(c) = real(roof_h2osno(l), r8)
         out_snol_roof(c)   = real(roof_snol(l),   r8)
-        ! j=1 = top layer → ELM levsno index nlevsno
+        ! j=1 = ground-adjacent layer → ELM levsno index nlevsno
         num_active = nint(roof_snol(l))
+        out_sno_t_roof  (c, :) = spval
+        out_sno_liq_roof(c, :) = spval
+        out_sno_ice_roof(c, :) = spval
+        out_sno_dz_roof (c, :) = spval
         do j = 1, num_active
           out_sno_t_roof  (c, nlevsno - j + 1) = real(roof_sno_t  (l, j), r8)
           out_sno_liq_roof(c, nlevsno - j + 1) = real(roof_sno_liq(l, j), r8)
@@ -924,6 +935,10 @@ contains
         out_qflxsubsnow_improad (c) = real(qflxsubsnow_improad(l), r8)
         out_qflxsurf_improad    (c) = real(qflxsurf_improad   (l), r8)
         num_active = nint(impr_snol(l))
+        out_sno_t_improad  (c, :) = spval
+        out_sno_liq_improad(c, :) = spval
+        out_sno_ice_improad(c, :) = spval
+        out_sno_dz_improad (c, :) = spval
         do j = 1, num_active
           out_sno_t_improad  (c, nlevsno - j + 1) = real(impr_sno_t  (l, j), r8)
           out_sno_liq_improad(c, nlevsno - j + 1) = real(impr_sno_liq(l, j), r8)
@@ -948,6 +963,10 @@ contains
         out_qflxsubsnow_perroad (c) = real(qflxsubsnow_perroad(l), r8)
         out_qflxsurf_perroad    (c) = real(qflxsurf_perroad   (l), r8)
         num_active = nint(perr_snol(l))
+        out_sno_t_perroad  (c, :) = spval
+        out_sno_liq_perroad(c, :) = spval
+        out_sno_ice_perroad(c, :) = spval
+        out_sno_dz_perroad (c, :) = spval
         do j = 1, num_active
           out_sno_t_perroad  (c, nlevsno - j + 1) = real(perr_sno_t  (l, j), r8)
           out_sno_liq_perroad(c, nlevsno - j + 1) = real(perr_sno_liq(l, j), r8)
@@ -1061,6 +1080,9 @@ contains
     deallocate(buf, netsw_roof, netsw_sunwall, netsw_shadwall, netsw_improad, netsw_perroad)
 
   end subroutine urbanxx_hist_update_radiation
+
+  !-----------------------------------------------------------------------
+  subroutine reshape_flat_to_2d(flat, arr2d, nl, nlev, isLayoutLeft)
     ! Reshape a Kokkos-layout flat buffer to 2D (nl, nlev).
     implicit none
     real(c_double), intent(in)  :: flat(:)

@@ -4707,7 +4707,7 @@ contains
     ! !USES:
     use elm_varpar      , only : nlevgrnd, nlevsno, nlevlak, numrad, nlevdecomp_full, nlevtrc_soil, nmonth, nvegwcs
     use elm_varpar      , only : natpft_size, cft_size, maxpatch_glcmec
-    use elm_varpar      , only : nlevsoi
+    use elm_varpar      , only : nlevsoi, nlevurb
     use landunit_varcon , only : max_lunit, max_non_poly_lunit
     use elm_varctl      , only : use_polygonal_tundra
     !
@@ -4787,6 +4787,8 @@ contains
        num2d = nlevgrnd
     case ('levsoi')
        num2d = nlevsoi
+    case ('levurb')
+       num2d = nlevurb
     case ('levlak')
        num2d = nlevlak
     case ('numrad')
@@ -4892,7 +4894,7 @@ contains
     case default
        write(iulog,*) trim(subname),' ERROR: unsupported 2d type ',type2d, &
           ' currently supported types for multi level fields are: ', &
-          '[levgrnd,levlak,numrad,nmonthlevdcmp,levtrc,ltype,natpft,cft,glc_nec,elevclas,levsno,levsoi]'
+          '[levgrnd,levlak,numrad,nmonthlevdcmp,levtrc,ltype,natpft,cft,glc_nec,elevclas,levsno,levsoi,levurb]'
        call endrun(msg=errMsg(__FILE__, __LINE__))
     end select
 
