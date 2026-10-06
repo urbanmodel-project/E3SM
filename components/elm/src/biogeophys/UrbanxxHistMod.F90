@@ -58,6 +58,14 @@ module UrbanxxHistMod
   ! 2D pervious road soil water: (begc:endc, 1:nlevgrnd)
   real(r8), allocatable, target :: out_soilliq_perroad(:,:)
   real(r8), allocatable, target :: out_soilice_perroad(:,:)
+  ! 2D impervious road soil water below the road material: (begc:endc, 1:nlevgrnd)
+  real(r8), allocatable, target :: out_soilliq_improad(:,:)
+  real(r8), allocatable, target :: out_soilice_improad(:,:)
+  ! 1D ponded top-layer water (ELM h2osoi_liq/ice(c,1)), roof and impervious road
+  real(r8), allocatable, target :: out_topliq_roof(:)
+  real(r8), allocatable, target :: out_topice_roof(:)
+  real(r8), allocatable, target :: out_topliq_improad(:)
+  real(r8), allocatable, target :: out_topice_improad(:)
 
   ! 1D snow state scalars: (begc:endc)
   real(r8), allocatable, target :: out_h2osno_roof(:)
@@ -159,6 +167,12 @@ contains
 
     allocate(out_soilliq_perroad(begc:endc, 1:nlevgrnd)); out_soilliq_perroad = spval
     allocate(out_soilice_perroad(begc:endc, 1:nlevgrnd)); out_soilice_perroad = spval
+    allocate(out_soilliq_improad(begc:endc, 1:nlevgrnd)); out_soilliq_improad = spval
+    allocate(out_soilice_improad(begc:endc, 1:nlevgrnd)); out_soilice_improad = spval
+    allocate(out_topliq_roof   (begc:endc)); out_topliq_roof    = spval
+    allocate(out_topice_roof   (begc:endc)); out_topice_roof    = spval
+    allocate(out_topliq_improad(begc:endc)); out_topliq_improad = spval
+    allocate(out_topice_improad(begc:endc)); out_topice_improad = spval
 
     allocate(out_h2osno_roof  (begc:endc)); out_h2osno_roof   = spval
     allocate(out_h2osno_improad(begc:endc));out_h2osno_improad = spval
@@ -343,6 +357,38 @@ contains
     call hist_addfld2d(fname='SOILICE_PERROAD_XX', type2d='levgrnd', units='kg/m2', &
          avgflag='A', long_name='URBANxx pervious road soil ice content', &
          ptr_col=ptr2d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ! Impervious road: layer 1 holds ponded water (see TOP*_IMPROAD_XX); the
+    ! natural-soil layers below the road material hold soil water.
+    ptr2d => out_soilliq_improad
+    call hist_addfld2d(fname='SOILLIQ_IMPROAD_XX', type2d='levgrnd', units='kg/m2', &
+         avgflag='A', long_name='URBANxx impervious road soil liquid water (layers below road material)', &
+         ptr_col=ptr2d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ptr2d => out_soilice_improad
+    call hist_addfld2d(fname='SOILICE_IMPROAD_XX', type2d='levgrnd', units='kg/m2', &
+         avgflag='A', long_name='URBANxx impervious road soil ice (layers below road material)', &
+         ptr_col=ptr2d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ptr1d => out_topliq_roof
+    call hist_addfld1d(fname='TOPLIQ_ROOF_XX', units='kg/m2', &
+         avgflag='A', long_name='URBANxx roof ponded liquid water (layer 1)', &
+         ptr_col=ptr1d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ptr1d => out_topice_roof
+    call hist_addfld1d(fname='TOPICE_ROOF_XX', units='kg/m2', &
+         avgflag='A', long_name='URBANxx roof ponded ice (layer 1)', &
+         ptr_col=ptr1d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ptr1d => out_topliq_improad
+    call hist_addfld1d(fname='TOPLIQ_IMPROAD_XX', units='kg/m2', &
+         avgflag='A', long_name='URBANxx impervious road ponded liquid water (layer 1)', &
+         ptr_col=ptr1d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
+
+    ptr1d => out_topice_improad
+    call hist_addfld1d(fname='TOPICE_IMPROAD_XX', units='kg/m2', &
+         avgflag='A', long_name='URBANxx impervious road ponded ice (layer 1)', &
+         ptr_col=ptr1d, set_nourb=0._r8, c2l_scale_type='urbanf', default='inactive')
 
     ! --- Register 1D building/canyon scalars (assigned to roof column) ---
 
@@ -565,6 +611,8 @@ contains
     real(c_double), allocatable :: roof_t(:,:), sunw_t(:,:), shadw_t(:,:)
     real(c_double), allocatable :: impr_t(:,:), perr_t(:,:)
     real(c_double), allocatable :: perr_liq(:,:), perr_ice(:,:)
+    real(c_double), allocatable :: impr_liq(:,:), impr_ice(:,:)
+    real(c_double), allocatable :: roof_topliq(:), roof_topice(:), impr_topliq(:), impr_topice(:)
     real(c_double), allocatable :: roof_sno_t(:,:), impr_sno_t(:,:), perr_sno_t(:,:)
     real(c_double), allocatable :: roof_sno_liq(:,:), impr_sno_liq(:,:), perr_sno_liq(:,:)
     real(c_double), allocatable :: roof_sno_ice(:,:), impr_sno_ice(:,:), perr_sno_ice(:,:)
@@ -601,6 +649,9 @@ contains
     allocate(shadw_t(num_urbanl, nlevurb));  allocate(impr_t(num_urbanl, nlevgrnd))
     allocate(perr_t(num_urbanl, nlevgrnd))
     allocate(perr_liq(num_urbanl, nlevgrnd)); allocate(perr_ice(num_urbanl, nlevgrnd))
+    allocate(impr_liq(num_urbanl, nlevgrnd)); allocate(impr_ice(num_urbanl, nlevgrnd))
+    allocate(roof_topliq(num_urbanl)); allocate(roof_topice(num_urbanl))
+    allocate(impr_topliq(num_urbanl)); allocate(impr_topice(num_urbanl))
     allocate(roof_sno_t(num_urbanl, nlevsno)); allocate(impr_sno_t(num_urbanl, nlevsno))
     allocate(perr_sno_t(num_urbanl, nlevsno))
     allocate(roof_sno_liq(num_urbanl, nlevsno)); allocate(impr_sno_liq(num_urbanl, nlevsno))
@@ -734,6 +785,30 @@ contains
     call UrbanGetSoilIceContentPerviousRoad(urbanxx, c_loc(buf_soil), size2D_soil, status)
     if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
     call reshape_flat_to_2d(buf_soil, perr_ice, num_urbanl, nlevgrnd, isLL)
+
+    call UrbanGetSoilLiquidWaterImperviousRoad(urbanxx, c_loc(buf_soil), size2D_soil, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    call reshape_flat_to_2d(buf_soil, impr_liq, num_urbanl, nlevgrnd, isLL)
+
+    call UrbanGetSoilIceContentImperviousRoad(urbanxx, c_loc(buf_soil), size2D_soil, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    call reshape_flat_to_2d(buf_soil, impr_ice, num_urbanl, nlevgrnd, isLL)
+
+    call UrbanGetTopH2OSoiLiqRoof(urbanxx, c_loc(buf_1d), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    roof_topliq(:) = buf_1d(:)
+
+    call UrbanGetTopH2OSoiIceRoof(urbanxx, c_loc(buf_1d), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    roof_topice(:) = buf_1d(:)
+
+    call UrbanGetTopH2OSoiLiqImperviousRoad(urbanxx, c_loc(buf_1d), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    impr_topliq(:) = buf_1d(:)
+
+    call UrbanGetTopH2OSoiIceImperviousRoad(urbanxx, c_loc(buf_1d), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(0, __LINE__, status)
+    impr_topice(:) = buf_1d(:)
 
     ! --- Phase 1E: canyon air and building temperatures ---
     call UrbanGetCanyonAirTemperature(urbanxx, c_loc(buf_1d), num_urbanl, status)
@@ -876,6 +951,8 @@ contains
           out_tsoi_roof(c, j) = real(roof_t(l, j), r8)
         end do
         out_h2osno_roof(c) = real(roof_h2osno(l), r8)
+        out_topliq_roof(c) = real(roof_topliq(l), r8)
+        out_topice_roof(c) = real(roof_topice(l), r8)
         out_snol_roof(c)   = real(roof_snol(l),   r8)
         ! j=1 = ground-adjacent layer → ELM levsno index nlevsno
         num_active = nint(roof_snol(l))
@@ -923,8 +1000,12 @@ contains
         idx_improad = idx_improad + 1
         l = idx_improad
         do j = 1, nlevgrnd
-          out_tsoi_improad(c, j) = real(impr_t(l, j), r8)
+          out_tsoi_improad(c, j)    = real(impr_t(l, j), r8)
+          out_soilliq_improad(c, j) = real(impr_liq(l, j), r8)
+          out_soilice_improad(c, j) = real(impr_ice(l, j), r8)
         end do
+        out_topliq_improad(c) = real(impr_topliq(l), r8)
+        out_topice_improad(c) = real(impr_topice(l), r8)
         out_h2osno_improad      (c) = real(impr_h2osno      (l), r8)
         out_snol_improad        (c) = real(impr_snol         (l), r8)
         out_eflx_sg_improad     (c) = real(eflx_sg_improad   (l), r8)
@@ -980,6 +1061,7 @@ contains
     deallocate(buf_urb, buf_soil, buf_sno, buf_1d)
     deallocate(roof_t, sunw_t, shadw_t, impr_t, perr_t)
     deallocate(perr_liq, perr_ice)
+    deallocate(impr_liq, impr_ice, roof_topliq, roof_topice, impr_topliq, impr_topice)
     deallocate(roof_sno_t, impr_sno_t, perr_sno_t)
     deallocate(roof_sno_liq, impr_sno_liq, perr_sno_liq)
     deallocate(roof_sno_ice, impr_sno_ice, perr_sno_ice)

@@ -133,10 +133,81 @@ contains
     ! on the first post-restart timestep.  On cold start eflx_urban_ac = 0.
     call SetACHeatFromState(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
 
+    ! Seed the lumped snow-cover scalars (H2OSno, SnowDepth, FracSno, IntSno)
+    ! from ELM's restart state. Without this they start at 0 after a restart,
+    ! so existing snow is invisible to the snow-cover fraction (net longwave,
+    ! albedo) and to the thin-snow phase change. On cold start ELM's values
+    ! are 0, so seeding is always safe.
+    call SetSnowCoverStateFromState(urbanxx, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+
     ! Allocate persistent buffers for physics modules
     ! (init calls moved to elm_initializeMod.F90 to avoid circular dependency)
 
   end subroutine urbanxx_initialize
+
+  !-----------------------------------------------------------------------
+  subroutine SetSnowCoverStateFromState(urban, num_urbanl, filter_urbanl, num_urbanc, filter_urbanc)
+    !
+    ! Seed URBANxx's snow-cover scalars once from ELM's h2osno, snow_depth,
+    ! frac_sno and int_snow for roof, impervious road and pervious road.
+    ! Packed in filter_urbanl order (URBANxx's landunit index).
+    !
+    use ColumnType     , only : col_pp
+    use ColumnDataType , only : col_ws
+    use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv
+    !
+    implicit none
+    !
+    type(UrbanType)        , intent(in) :: urban
+    integer(c_int)         , intent(in) :: num_urbanl
+    integer                , intent(in) :: filter_urbanl(:)
+    integer(c_int)         , intent(in) :: num_urbanc
+    integer                , intent(in) :: filter_urbanc(:)
+    !
+    integer(c_int)                       :: status
+    integer                              :: fl, l, fc, c, k
+    integer, parameter                   :: nsurf = 3
+    integer                              :: ctype(nsurf)
+    real(c_double), allocatable, target  :: h2osno(:,:), sdepth(:,:), fsno(:,:), isno(:,:)
+
+    ctype = (/ icol_roof, icol_road_imperv, icol_road_perv /)
+    allocate(h2osno(num_urbanl,nsurf), sdepth(num_urbanl,nsurf), fsno(num_urbanl,nsurf), isno(num_urbanl,nsurf))
+    h2osno = 0._c_double; sdepth = 0._c_double; fsno = 0._c_double; isno = 0._c_double
+
+    do fl = 1, num_urbanl
+       l = filter_urbanl(fl)
+       do fc = 1, num_urbanc
+          c = filter_urbanc(fc)
+          if (col_pp%landunit(c) /= l) cycle
+          do k = 1, nsurf
+             if (col_pp%itype(c) == ctype(k)) then
+                ! spval (never set for this column) is seeded as 0
+                h2osno(fl,k) = real(merge(col_ws%h2osno(c)    , 0._r8, abs(col_ws%h2osno(c))     < 1.e30_r8), c_double)
+                sdepth(fl,k) = real(merge(col_ws%snow_depth(c), 0._r8, abs(col_ws%snow_depth(c)) < 1.e30_r8), c_double)
+                fsno  (fl,k) = real(merge(col_ws%frac_sno(c)  , 0._r8, abs(col_ws%frac_sno(c))   < 1.e30_r8), c_double)
+                isno  (fl,k) = real(merge(col_ws%int_snow(c)  , 0._r8, abs(col_ws%int_snow(c))   < 1.e30_r8), c_double)
+             end if
+          end do
+       end do
+    end do
+
+    call UrbanSetSnowCoverStateRoof(urban, c_loc(h2osno(1,1)), c_loc(sdepth(1,1)), &
+         c_loc(fsno(1,1)), c_loc(isno(1,1)), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanSetSnowCoverStateImperviousRoad(urban, c_loc(h2osno(1,2)), c_loc(sdepth(1,2)), &
+         c_loc(fsno(1,2)), c_loc(isno(1,2)), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+    call UrbanSetSnowCoverStatePerviousRoad(urban, c_loc(h2osno(1,3)), c_loc(sdepth(1,3)), &
+         c_loc(fsno(1,3)), c_loc(isno(1,3)), num_urbanl, status)
+    if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
+
+    deallocate(h2osno, sdepth, fsno, isno)
+
+    if (masterproc) then
+       write(iulog,*) 'Seeded snow-cover state (H2OSno, SnowDepth, FracSno, IntSno) from ELM data'
+    end if
+
+  end subroutine SetSnowCoverStateFromState
 
   !-----------------------------------------------------------------------
   subroutine CheckBedrockLayerAssumption(num_urbanc, filter_urbanc)

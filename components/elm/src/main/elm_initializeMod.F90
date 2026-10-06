@@ -1189,6 +1189,7 @@ contains
     use filterMod                , only : filter
     use UrbanxxMod               , only : urbanxx_initialize
     use UrbanxxNetLongwaveMod    , only : urbanxx_netLongwave_init
+    use UrbanxxSurfaceTempSyncMod, only : urbanxx_syncSurfaceTemp
     use UrbanxxNetShortwaveMod   , only : urbanxx_netShortwave_init
     use UrbanxxSurfaceFluxesMod  , only : urbanxx_surfaceFluxes_init
     use UrbanxxSoilTemperatureMod, only : urbanxx_soilTemperature_init
@@ -1266,6 +1267,13 @@ contains
                     filter(nc)%urbanp,     &
                     urbanparams_vars, solarabs_vars, surfalb_vars, top_as, &
                     soilstate_vars, soilhydrology_vars)
+
+        ! Seed EffectiveSurfTemp from ELM's restored t_grnd once, so the
+        ! first timestep's urbanxx_netLongwave (which runs before the
+        ! per-step sync) sees the restart surface temperature rather than
+        ! URBANxx's default; matters whenever snow layers exist at restart.
+        call urbanxx_syncSurfaceTemp(filter(nc)%num_urbanl, &
+                    filter(nc)%num_urbanc, filter(nc)%urbanc)
 
         ! Allocate persistent buffers for physics modules
         call urbanxx_netLongwave_init(filter(nc)%num_urbanl)
