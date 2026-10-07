@@ -245,7 +245,8 @@ contains
     use ColumnType    , only : col_pp
     use column_varcon , only : icol_roof, icol_road_imperv, icol_road_perv, &
                                icol_sunwall, icol_shadewall
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_GRND_FLUX, TOL_PHYS_WATER_FLUX
     !
     implicit none
     !
@@ -257,7 +258,7 @@ contains
     integer :: fp, p, c
     integer :: idx_roof, idx_improad, idx_perroad, idx_sunwall, idx_shadwall
     real(r8) :: max_error, max_rel_error
-    real(r8) :: err_eflx, err_qflx_evap, err_qflx_sub, err_qflx_dsn, err_qflx_dg
+    real(r8) :: err_eflx, err_qflx_evap, err_qflx_sub, err_qflx_dsn, err_qflx_dg, tol_e, tol_w
     real(r8) :: urb_eflx, urb_qflx_evap, urb_qflx_sub, urb_qflx_dsn, urb_qflx_dg
 
     max_error     = 0._r8
@@ -333,9 +334,11 @@ contains
            err_qflx_dsn  / max(abs(veg_wf%qflx_dew_snow(p)),  1.0e-20_r8), &
            err_qflx_dg   / max(abs(veg_wf%qflx_dew_grnd(p)),  1.0e-20_r8))
 
-      if (err_eflx > 1.0e-8_r8 .or. err_qflx_evap > 1.0e-8_r8 .or. &
-          err_qflx_sub > 1.0e-8_r8 .or. err_qflx_dsn > 1.0e-8_r8 .or. &
-          err_qflx_dg  > 1.0e-8_r8) then
+      tol_e = urbanxx_col_tol(c, 1.0e-8_r8, TOL_PHYS_GRND_FLUX)
+      tol_w = urbanxx_col_tol(c, 1.0e-8_r8, TOL_PHYS_WATER_FLUX)
+      if (err_eflx > tol_e .or. err_qflx_evap > tol_w .or. &
+          err_qflx_sub > tol_w .or. err_qflx_dsn > tol_w .or. &
+          err_qflx_dg  > tol_w) then
         write(iulog,*) 'ERROR: Soil flux mismatch between ELM and URBANxx at p=', p, ' c=', c
         write(iulog,*) '  col_type=', col_pp%itype(c)
         write(iulog,*) '  err_eflx_soil_grnd = ', err_eflx
@@ -345,11 +348,11 @@ contains
         write(iulog,*) '  err_qflx_dew_grnd  = ', err_qflx_dg
         write(iulog,*) '  ELM    eflx_soil_grnd=', veg_ef%eflx_soil_grnd(p)
         write(iulog,*) '  URBANxx eflx_soil_grnd=', urb_eflx
-        if (urbanxx_softfail_permits(err_eflx,      1.0e-8_r8) .and. &
-            urbanxx_softfail_permits(err_qflx_evap, 1.0e-8_r8) .and. &
-            urbanxx_softfail_permits(err_qflx_sub,  1.0e-8_r8) .and. &
-            urbanxx_softfail_permits(err_qflx_dsn,  1.0e-8_r8) .and. &
-            urbanxx_softfail_permits(err_qflx_dg,   1.0e-8_r8)) then
+        if (urbanxx_softfail_permits(err_eflx,      tol_e) .and. &
+            urbanxx_softfail_permits(err_qflx_evap, tol_w) .and. &
+            urbanxx_softfail_permits(err_qflx_sub,  tol_w) .and. &
+            urbanxx_softfail_permits(err_qflx_dsn,  tol_w) .and. &
+            urbanxx_softfail_permits(err_qflx_dg,   tol_w)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: all exceedances (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
         else
           call exit(0)

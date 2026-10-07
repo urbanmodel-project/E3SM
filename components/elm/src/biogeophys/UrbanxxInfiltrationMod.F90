@@ -81,7 +81,8 @@ contains
     !
     use ColumnType     , only : col_pp
     use column_varcon  , only : icol_road_perv
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_WATER_FLUX
     !
     implicit none
     !
@@ -92,7 +93,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer  :: fc, c, idx_perv
-    real(r8) :: max_abs_err, max_rel_err, abs_err, rel_err
+    real(r8) :: max_abs_err, max_rel_err, abs_err, rel_err, tol_c
 
     associate( &
          qflx_infl => col_wf%qflx_infl &
@@ -110,10 +111,11 @@ contains
           rel_err = abs_err / max(abs(qflx_infl(c)), 1.0e-20_r8)
           max_abs_err = max(max_abs_err, abs_err)
           max_rel_err = max(max_rel_err, rel_err)
-          if (max_abs_err > 1.0e-9_r8) then
-            write(iulog,*)'Max error in qflx_infl: ', max_abs_err, ' at column ', c, &
-                 ' itype = ', col_pp%itype(c), ' exceeds tolerance'
-            if (urbanxx_softfail_permits(max_abs_err, 1.0e-9_r8)) then
+          tol_c = urbanxx_col_tol(c, 1.0e-9_r8, TOL_PHYS_WATER_FLUX)
+          if (abs_err > tol_c) then
+            write(iulog,*)'Max error in qflx_infl: ', abs_err, ' at column ', c, &
+                 ' itype = ', col_pp%itype(c), ' exceeds tolerance ', tol_c
+            if (urbanxx_softfail_permits(abs_err, tol_c)) then
               write(iulog,*) '  URBANxx check failure permitted to continue: qflx_infl error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
             else
               call exit(0)

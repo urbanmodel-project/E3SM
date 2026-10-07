@@ -206,7 +206,8 @@ contains
     use ColumnType     , only : col_pp
     use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv, &
                                 icol_sunwall, icol_shadewall
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_WATER_FLUX
     !
     implicit none
     !
@@ -250,11 +251,11 @@ contains
           rel_err   = abs_err / max(abs(qflx_surf(c)), 1.0e-20_r8)
           max_err_roof     = max(max_err_roof,     abs_err)
           max_rel_err_roof = max(max_rel_err_roof, rel_err)
-          if (abs_err > 1.0e-10_r8) then
+          if (abs_err > urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)) then
             write(iulog,*) 'ERROR: qflx_surf mismatch (roof) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_roof(idx_roof)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+            if (urbanxx_softfail_permits(abs_err, urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX))) then
               write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
@@ -266,11 +267,11 @@ contains
           rel_err     = abs_err / max(abs(qflx_surf(c)), 1.0e-20_r8)
           max_err_imperv     = max(max_err_imperv,     abs_err)
           max_rel_err_imperv = max(max_rel_err_imperv, rel_err)
-          if (abs_err > 1.0e-10_r8) then
+          if (abs_err > urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)) then
             write(iulog,*) 'ERROR: qflx_surf mismatch (imperv road) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_imperv(idx_imperv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+            if (urbanxx_softfail_permits(abs_err, urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX))) then
               write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
@@ -282,11 +283,11 @@ contains
           rel_err   = abs_err / max(abs(qflx_surf(c)), 1.0e-20_r8)
           max_err_perv     = max(max_err_perv,     abs_err)
           max_rel_err_perv = max(max_rel_err_perv, rel_err)
-          if (abs_err > 1.0e-10_r8) then
+          if (abs_err > urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)) then
             write(iulog,*) 'ERROR: qflx_surf mismatch (pervious road) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_perv(idx_perv)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+            if (urbanxx_softfail_permits(abs_err, urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX))) then
               write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
@@ -298,11 +299,11 @@ contains
           rel_err     = abs_err / max(abs(qflx_surf(c)), 1.0e-20_r8)
           max_err_sunwall     = max(max_err_sunwall,     abs_err)
           max_rel_err_sunwall = max(max_rel_err_sunwall, rel_err)
-          if (abs_err > 1.0e-10_r8) then
+          if (abs_err > urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)) then
             write(iulog,*) 'ERROR: qflx_surf mismatch (sunlit wall) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_sunwall(idx_sunwall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+            if (urbanxx_softfail_permits(abs_err, urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX))) then
               write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)
@@ -314,11 +315,11 @@ contains
           rel_err       = abs_err / max(abs(qflx_surf(c)), 1.0e-20_r8)
           max_err_shadewall     = max(max_err_shadewall,     abs_err)
           max_rel_err_shadewall = max(max_rel_err_shadewall, rel_err)
-          if (abs_err > 1.0e-10_r8) then
+          if (abs_err > urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)) then
             write(iulog,*) 'ERROR: qflx_surf mismatch (shaded wall) at c=', c
             write(iulog,*) '  ELM=', qflx_surf(c), ' URBANxx=', out_qflx_surf_shadewall(idx_shadewall)
             write(iulog,*) '  abs_err=', abs_err, ' rel_err=', rel_err
-            if (urbanxx_softfail_permits(abs_err, 1.0e-10_r8)) then
+            if (urbanxx_softfail_permits(abs_err, urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX))) then
               write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
             else
               call exit(0)

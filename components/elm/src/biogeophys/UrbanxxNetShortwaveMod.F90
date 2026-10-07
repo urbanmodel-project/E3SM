@@ -103,7 +103,8 @@ contains
     use SolarAbsorbedType , only : solarabs_type
     use elm_time_manager , only : get_nstep, get_curr_date
     use elm_varcon        , only : spval
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_ENERGY_FLUX
     !
     implicit none
     !
@@ -184,7 +185,7 @@ contains
         max_error     = max(max_error, abs_diff)
         max_rel_error = max(max_rel_error, rel_diff)
 
-        if (abs_diff > 1.0e-9_r8) then
+        if (abs_diff > urbanxx_col_tol(c, 1.0e-9_r8, TOL_PHYS_ENERGY_FLUX)) then
           call get_curr_date(year, month, day, tod)
           write(iulog,'(A)') 'ERROR: URBANxx net-shortwave comparison exceeds tolerance'
           write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
@@ -194,7 +195,7 @@ contains
           write(iulog,'(A,ES24.16)') '  signed difference      =', signed_diff
           write(iulog,'(A,ES24.16)') '  absolute difference    =', abs_diff
           write(iulog,'(A,ES24.16)') '  relative difference    =', rel_diff
-          if (urbanxx_softfail_permits(abs_diff, 1.0e-9_r8)) then
+          if (urbanxx_softfail_permits(abs_diff, urbanxx_col_tol(c, 1.0e-9_r8, TOL_PHYS_ENERGY_FLUX))) then
             write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)

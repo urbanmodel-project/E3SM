@@ -113,7 +113,8 @@ contains
     use elm_varpar     , only : nlevgrnd
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
     use elm_time_manager       , only : get_nstep
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         urbanxx_note_perv_drift, TOL_PHYS_SOIL_WATER
     !
     implicit none
     !
@@ -128,7 +129,7 @@ contains
     integer  :: fc, c, j, l, count, idx_perv
     integer  :: max_err_c, max_err_j, max_err_idx_perv
     real(r8) :: max_error_liq, max_error_vol, max_rel_error_liq
-    real(r8) :: diff, max_err_elm, max_err_uxx
+    real(r8) :: diff, max_err_elm, max_err_uxx, max_ratio
 
     associate( &
          h2osoi_liq => col_ws%h2osoi_liq , &
@@ -167,6 +168,7 @@ contains
       max_err_idx_perv  = -1
       max_err_elm       = 0._r8
       max_err_uxx       = 0._r8
+      max_ratio         = 0._r8
       idx_perv = 0
 
       do fc = 1, num_urbanc
@@ -175,6 +177,8 @@ contains
           idx_perv = idx_perv + 1
           do j = 1, nlevgrnd
             diff              = abs(h2osoi_liq(c,j) - h2osoi_liq_2d(idx_perv,j))
+            call urbanxx_note_perv_drift(c, j, diff, 1.0e-6_r8, 'soil water')
+            max_ratio         = max(max_ratio, diff / urbanxx_col_tol(c, 1.0e-6_r8, TOL_PHYS_SOIL_WATER))
             max_rel_error_liq = max(max_rel_error_liq, diff / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
             max_error_vol     = max(max_error_vol,     abs(h2osoi_vol(c,j) - h2osoi_vol_2d(idx_perv,j)))
             if (diff > max_error_liq) then
@@ -191,7 +195,7 @@ contains
 
       write(iulog,'(A,I6,A,ES12.4,A,ES12.4,A)') 'Max error in soil water (h2osoi_liq) step=', get_nstep(), &
            ': ', max_error_liq, ' (rel: ', max_rel_error_liq, ')'
-      if (max_error_liq > 1.0e-6_r8) then
+      if (max_ratio > 1._r8) then
         write(iulog,*) 'ERROR: Max soil liquid water error exceeds threshold!'
         write(iulog,*) '  ELM column c          :', max_err_c
         write(iulog,*) '  URBANxx idx_perv      :', max_err_idx_perv
@@ -199,7 +203,7 @@ contains
         write(iulog,*) '  ELM    h2osoi_liq(c,j):', max_err_elm
         write(iulog,*) '  URBANxx h2osoi_liq    :', max_err_uxx
         write(iulog,*) '  Abs difference        :', max_error_liq
-        if (urbanxx_softfail_permits(max_error_liq, 1.0e-6_r8)) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
         else
           call exit(0)

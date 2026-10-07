@@ -226,7 +226,9 @@ contains
     use shr_log_mod           , only : errmsg => shr_log_errmsg
     use SoilHydrologyType     , only : soilhydrology_type
     use urban_kokkos_interface, only : UrbanKokkosIsLayoutLeft
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         urbanxx_note_perv_drift, TOL_PHYS_ZWT, TOL_PHYS_WA, TOL_PHYS_ZWT_PERCHED, &
+         TOL_PHYS_SOIL_WATER, TOL_PHYS_TOP_WATER
     !
     implicit none
     !
@@ -239,7 +241,7 @@ contains
     ! !LOCAL VARIABLES:
     ! (outputs are in module-level out_* buffers from the last call to urbanxx_waterTable)
     integer  :: fc, c, j, l, count, idx_perv
-    real(r8) :: max_abs_err, max_rel_err, abs_err
+    real(r8) :: max_abs_err, max_rel_err, abs_err, max_ratio
 
     ! Tolerance for endrun
     real(r8), parameter :: tol = 1.0e-6_r8
@@ -254,6 +256,7 @@ contains
 
       ! --- zwt_col ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       idx_perv = 0
       do fc = 1, num_urbanc
@@ -262,13 +265,14 @@ contains
           idx_perv = idx_perv + 1
           abs_err = abs(zwt_col(c) - out_zwt(idx_perv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_ZWT))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(zwt_col(c)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in zwt_col                :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: zwt_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: zwt_col error too large'//errmsg(__FILE__,__LINE__))
@@ -277,6 +281,7 @@ contains
 
       ! --- wa_col ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       idx_perv = 0
       do fc = 1, num_urbanc
@@ -285,13 +290,14 @@ contains
           idx_perv = idx_perv + 1
           abs_err = abs(wa_col(c) - out_wa(idx_perv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_WA))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(wa_col(c)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in wa_col                 :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: wa_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: wa_col error too large'//errmsg(__FILE__,__LINE__))
@@ -300,6 +306,7 @@ contains
 
       ! --- zwt_perched_col ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       idx_perv = 0
       do fc = 1, num_urbanc
@@ -308,13 +315,14 @@ contains
           idx_perv = idx_perv + 1
           abs_err = abs(zwt_perched_col(c) - out_zwt_perched(idx_perv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_ZWT_PERCHED))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(zwt_perched_col(c)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in zwt_perched_col        :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: zwt_perched_col error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: zwt_perched_col error too large'//errmsg(__FILE__,__LINE__))
@@ -323,6 +331,7 @@ contains
 
       ! --- h2osoi_liq ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
 
       if (UrbanKokkosIsLayoutLeft()) then
@@ -336,6 +345,8 @@ contains
               count = count + 1
               abs_err = abs(h2osoi_liq(c,j) - out_h2osoi_liq(count))
               max_abs_err = max(max_abs_err, abs_err)
+              call urbanxx_note_perv_drift(c, j, abs_err, tol, 'soil water')
+              max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_SOIL_WATER))
               max_rel_err = max(max_rel_err, &
                    abs_err / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
             end if
@@ -350,6 +361,8 @@ contains
               count = count + 1
               abs_err = abs(h2osoi_liq(c,j) - out_h2osoi_liq(count))
               max_abs_err = max(max_abs_err, abs_err)
+              call urbanxx_note_perv_drift(c, j, abs_err, tol, 'soil water')
+              max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_SOIL_WATER))
               max_rel_err = max(max_rel_err, &
                    abs_err / max(abs(h2osoi_liq(c,j)), 1.0e-20_r8))
             end do
@@ -357,8 +370,8 @@ contains
         end do
       end if
       write(iulog,*) 'Max error in h2osoi_liq             :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: h2osoi_liq error too large'//errmsg(__FILE__,__LINE__))
@@ -367,6 +380,7 @@ contains
 
       ! --- h2osoi_ice ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
 
       if (UrbanKokkosIsLayoutLeft()) then
@@ -380,6 +394,8 @@ contains
               count = count + 1
               abs_err = abs(h2osoi_ice(c,j) - out_h2osoi_ice(count))
               max_abs_err = max(max_abs_err, abs_err)
+              call urbanxx_note_perv_drift(c, j, abs_err, tol, 'soil water')
+              max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_SOIL_WATER))
               max_rel_err = max(max_rel_err, &
                    abs_err / max(abs(h2osoi_ice(c,j)), 1.0e-20_r8))
             end if
@@ -394,6 +410,8 @@ contains
               count = count + 1
               abs_err = abs(h2osoi_ice(c,j) - out_h2osoi_ice(count))
               max_abs_err = max(max_abs_err, abs_err)
+              call urbanxx_note_perv_drift(c, j, abs_err, tol, 'soil water')
+              max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_SOIL_WATER))
               max_rel_err = max(max_rel_err, &
                    abs_err / max(abs(h2osoi_ice(c,j)), 1.0e-20_r8))
             end do
@@ -401,8 +419,8 @@ contains
         end do
       end if
       write(iulog,*) 'Max error in h2osoi_ice             :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_waterTable_check: h2osoi_ice error too large'//errmsg(__FILE__,__LINE__))
@@ -477,7 +495,9 @@ contains
     use column_varcon, only : icol_roof, icol_road_imperv
     use abortutils   , only : endrun
     use shr_log_mod  , only : errmsg => shr_log_errmsg
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         urbanxx_note_perv_drift, TOL_PHYS_ZWT, TOL_PHYS_WA, TOL_PHYS_ZWT_PERCHED, &
+         TOL_PHYS_SOIL_WATER, TOL_PHYS_TOP_WATER
     !
     implicit none
     !
@@ -488,7 +508,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer  :: fc, c, l_roof, l_imperv
-    real(r8) :: max_abs_err, max_rel_err, abs_err
+    real(r8) :: max_abs_err, max_rel_err, abs_err, max_ratio
     real(r8), parameter :: tol = 1.0e-6_r8
 
     associate( &
@@ -498,6 +518,7 @@ contains
 
       ! --- h2osoi_liq (roof) ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       l_roof = 0
       do fc = 1, num_urbanc
@@ -506,13 +527,14 @@ contains
           l_roof = l_roof + 1
           abs_err = abs(h2osoi_liq(c,1) - out_top_liq_roof(l_roof))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_TOP_WATER))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(h2osoi_liq(c,1)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_liq (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq (roof) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq roof error too large'//errmsg(__FILE__,__LINE__))
@@ -521,6 +543,7 @@ contains
 
       ! --- h2osoi_ice (roof) ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       l_roof = 0
       do fc = 1, num_urbanc
@@ -529,13 +552,14 @@ contains
           l_roof = l_roof + 1
           abs_err = abs(h2osoi_ice(c,1) - out_top_ice_roof(l_roof))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_TOP_WATER))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(h2osoi_ice(c,1)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_ice (roof)      :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice (roof) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice roof error too large'//errmsg(__FILE__,__LINE__))
@@ -544,6 +568,7 @@ contains
 
       ! --- h2osoi_liq (impervious road) ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       l_imperv = 0
       do fc = 1, num_urbanc
@@ -552,13 +577,14 @@ contains
           l_imperv = l_imperv + 1
           abs_err = abs(h2osoi_liq(c,1) - out_top_liq_imperv(l_imperv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_TOP_WATER))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(h2osoi_liq(c,1)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_liq (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_liq (imperv) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_liq imperv road error too large'//errmsg(__FILE__,__LINE__))
@@ -567,6 +593,7 @@ contains
 
       ! --- h2osoi_ice (impervious road) ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       l_imperv = 0
       do fc = 1, num_urbanc
@@ -575,13 +602,14 @@ contains
           l_imperv = l_imperv + 1
           abs_err = abs(h2osoi_ice(c,1) - out_top_ice_imperv(l_imperv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_TOP_WATER))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(h2osoi_ice(c,1)), 1.0e-20_r8))
         end if
       end do
       write(iulog,*) 'Max error in h2osoi_ice (imperv)    :', max_abs_err, '  (rel:', max_rel_err, ')'
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: h2osoi_ice (imperv) error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun(msg='urbanxx_dewCondensation_check: h2osoi_ice imperv road error too large'//errmsg(__FILE__,__LINE__))

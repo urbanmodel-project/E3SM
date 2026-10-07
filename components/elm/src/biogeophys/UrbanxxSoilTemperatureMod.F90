@@ -220,7 +220,8 @@ contains
     use urban_kokkos_interface , only : UrbanKokkosIsLayoutLeft
     use ColumnDataType    , only : col_es, col_ws, col_ef, col_wf
     use elm_time_manager  , only : get_nstep, get_curr_date
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         urbanxx_note_perv_drift, TOL_PHYS_TEMP, TOL_PHYS_WATER_FLUX
     !
     implicit none
     !
@@ -243,6 +244,7 @@ contains
     integer(c_int), dimension(2)         :: size2D_urban, size2D_soil
     real(r8)                             :: max_error, max_rel_error
     real(r8)                             :: column_max_error, column_max_rel_error
+    real(r8)                             :: tol_temp, tol_flux
     real(r8)                             :: elm_value, urbanxx_value, signed_diff, abs_diff, rel_diff
     real(r8)                             :: flux_max_error, flux_max_rel_error
     real(r8)                             :: column_flux_error, column_flux_rel_error
@@ -368,7 +370,10 @@ contains
           call record_flux_error(qflx_snomelt(c), qflxsnowmelt_perroad(idx_road_perv))
         end select
 
-        if (column_max_error > 1.0e-9_r8) then
+        call urbanxx_note_perv_drift(c, column_max_layer, column_max_error, 1.0e-9_r8, 'soil temperature')
+        tol_temp = urbanxx_col_tol(c, 1.0e-9_r8, TOL_PHYS_TEMP)
+        tol_flux = urbanxx_col_tol(c, 1.0e-9_r8, TOL_PHYS_WATER_FLUX)
+        if (column_max_error > tol_temp) then
           call get_curr_date(year, month, day, tod)
           write(iulog,'(A)') 'ERROR: URBANxx soil-temperature comparison exceeds tolerance'
           write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
@@ -384,14 +389,15 @@ contains
           write(iulog,'(A,2ES24.16)') '  ELM top liq/ice       =', h2osoi_liq(c,1), h2osoi_ice(c,1)
           write(iulog,'(A,3ES24.16)') '  ELM flux deriv/state  =', eflx_dhsdT(c), eflx_hs_top_snow(c), htvp(c)
           write(iulog,'(A,ES24.16)') '  ELM sabg_lyr top      =', eflx_sabg_lyr(c,1)
-          if (urbanxx_softfail_permits(column_max_error, 1.0e-9_r8)) then
+          write(iulog,'(A,ES12.4)') '  tolerance             =', tol_temp
+          if (urbanxx_softfail_permits(column_max_error, tol_temp)) then
             write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)
           endif
         endif
 
-        if (column_flux_error > 1.0e-9_r8) then
+        if (column_flux_error > tol_flux) then
           call get_curr_date(year, month, day, tod)
           write(iulog,'(A)') 'ERROR: URBANxx snow-melt flux comparison exceeds tolerance'
           write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', year, '-', month, '-', day, ', tod=', tod
@@ -405,7 +411,7 @@ contains
           write(iulog,'(A,ES24.16)') '  relative difference   =', column_flux_rel_error
           write(iulog,'(A,3ES24.16)') '  ELM snow state        =', h2osno(c), snow_depth(c), frac_sno(c)
           write(iulog,'(A,2ES24.16)') '  ELM top liq/ice       =', h2osoi_liq(c,1), h2osoi_ice(c,1)
-          if (urbanxx_softfail_permits(column_flux_error, 1.0e-9_r8)) then
+          if (urbanxx_softfail_permits(column_flux_error, tol_flux)) then
             write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)

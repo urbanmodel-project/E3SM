@@ -57,7 +57,8 @@ module UrbanxxEnergyBalanceMod
                                           eflx_soil_grnd_shadwall
   use UrbanxxSoilTemperatureMod  , only : layertemp_improad, layertemp_perroad, &
                                           layertemp_roof, layertemp_sunwall, layertemp_shadwall
-  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_ERRSOI
 
   implicit none
 
@@ -444,10 +445,14 @@ contains
       real(r8)         , intent(inout) :: max_error
       !
       integer :: yr, mo, dy, tod
+      real(r8) :: twarn, tabort
 
       max_error = max(max_error, abs(errsoi))
+      ! Drifted landunits use the physical tier (warn at a tenth of it).
+      twarn  = urbanxx_col_tol(c, tol_warn,  0.1_r8 * TOL_PHYS_ERRSOI)
+      tabort = urbanxx_col_tol(c, tol_abort, TOL_PHYS_ERRSOI)
 
-      if (abs(errsoi) > tol_warn) then
+      if (abs(errsoi) > twarn) then
         call get_curr_date(yr, mo, dy, tod)
         write(iulog,'(A)') 'WARNING: URBANxx energy-balance-closure (errsoi) residual exceeds tolerance'
         write(iulog,'(A,A)')     '  surface       = ', trim(surfname)
@@ -455,8 +460,8 @@ contains
         write(iulog,'(A,I0,A,I0,A,I0,A,I0,A,I0)') '  step=', get_nstep(), ', date=', yr, '-', mo, '-', dy, ', tod=', tod
         write(iulog,'(A,ES24.16)') '  errsoi (W/m^2) = ', errsoi
 
-        if (abs(errsoi) > tol_abort) then
-          if (urbanxx_softfail_permits(abs(errsoi), tol_abort)) then
+        if (abs(errsoi) > tabort) then
+          if (urbanxx_softfail_permits(abs(errsoi), tabort)) then
             write(iulog,'(A)') '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
           else
             call exit(0)

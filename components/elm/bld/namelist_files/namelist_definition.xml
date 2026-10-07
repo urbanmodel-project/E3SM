@@ -2149,6 +2149,17 @@ regardless of exceedance magnitude: every check logs its error and the run
 always continues to completion.
 </entry>
 
+<entry id="urbanxx_drift_tolerance" type="logical" category="default_settings"
+        group="elm_inparm" valid_values="">
+Two-tier URBANxx parity-check tolerances. Every check starts at its
+round-off tolerance. When a landunit's pervious road first exceeds a soil
+temperature or soil water check at a layer holding ice (the known
+freeze/thaw amplification of one-ulp Fortran-vs-C++ differences), that
+landunit's checks switch to physical tolerances for the rest of the run,
+so the run can stay strict elsewhere and still abort on large errors.
+Set .false. to keep round-off tolerances everywhere.
+</entry>
+
 <entry id="urbanxx_output" type="logical" category="history"
         group="elm_inparm" valid_values="">
 Runtime flag to write URBANxx's own state and fluxes (fields suffixed _XX,

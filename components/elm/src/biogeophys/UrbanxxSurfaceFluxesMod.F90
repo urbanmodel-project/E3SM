@@ -20,7 +20,9 @@ module UrbanxxSurfaceFluxesMod
   use LandunitDataType     , only : lun_es, lun_ws
   use LandunitType         , only : lun_pp
   use TopounitDataType     , only : top_as
-  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, urbanxx_lun_tol, &
+        TOL_PHYS_ENERGY_FLUX, TOL_PHYS_WATER_FLUX, TOL_PHYS_DSH_DT, TOL_PHYS_DEVAP_DT, &
+        TOL_PHYS_TEMP, TOL_PHYS_QAF
 
   implicit none
 
@@ -111,7 +113,7 @@ contains
     !
     integer(c_int)                       :: status
     integer                              :: fp, c, p, fl, l
-    real(r8)                             :: max_error, max_rel_error
+    real(r8)                             :: max_error, max_rel_error, max_ratio, tol_sh, tol_ev, tol_csh, tol_cev
     real(r8)                             :: err_eflx_sh_grnd, err_qflx_evap_soi, err_cgrnds, err_cgrndl
     real(r8)                             :: rel_eflx_sh_grnd, rel_qflx_evap_soi, rel_cgrnds, rel_cgrndl
     integer :: idx_roof, idx_road_improv, idx_road_perv, idx_sunwall, idx_shadwall, idx_landunit
@@ -238,8 +240,12 @@ contains
          rel_cgrndl       = err_cgrndl       / max(abs(veg_ef%cgrndl(p)),        1.0e-20_r8)
       end select
 
-      if (err_eflx_sh_grnd > 1.0e-10_r8 .or. err_qflx_evap_soi > 1.0e-10_r8 .or. &
-          err_cgrnds       > 1.0e-10_r8 .or. err_cgrndl        > 1.0e-10_r8) then
+      tol_sh  = urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_ENERGY_FLUX)
+      tol_ev  = urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_WATER_FLUX)
+      tol_csh = urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_DSH_DT)
+      tol_cev = urbanxx_col_tol(c, 1.0e-10_r8, TOL_PHYS_DEVAP_DT)
+      if (err_eflx_sh_grnd > tol_sh  .or. err_qflx_evap_soi > tol_ev .or. &
+          err_cgrnds       > tol_csh .or. err_cgrndl        > tol_cev) then
          write(iulog,*) 'ERROR: Surface flux error exceeds tolerance at p=', p, ' c=', c
          write(iulog,*) '  err_eflx_sh_grnd  = ', err_eflx_sh_grnd
          write(iulog,*) '  err_qflx_evap_soi = ', err_qflx_evap_soi
@@ -255,10 +261,10 @@ contains
          write(iulog,'(A,2ES24.16)') '  ELM top liq/ice     = ', col_ws%h2osoi_liq(c,1), col_ws%h2osoi_ice(c,1)
          write(iulog,'(A,2ES24.16)') '  ELM taf/qaf         = ', lun_es%taf(col_pp%landunit(c)), lun_ws%qaf(col_pp%landunit(c))
          write(iulog,'(A,ES24.16)') '  ELM gustiness       = ', top_as%ugust(lun_pp%topounit(col_pp%landunit(c)))
-         if (urbanxx_softfail_permits(err_eflx_sh_grnd,  1.0e-10_r8) .and. &
-             urbanxx_softfail_permits(err_qflx_evap_soi, 1.0e-10_r8) .and. &
-             urbanxx_softfail_permits(err_cgrnds,        1.0e-10_r8) .and. &
-             urbanxx_softfail_permits(err_cgrndl,        1.0e-10_r8)) then
+         if (urbanxx_softfail_permits(err_eflx_sh_grnd,  tol_sh)  .and. &
+             urbanxx_softfail_permits(err_qflx_evap_soi, tol_ev)  .and. &
+             urbanxx_softfail_permits(err_cgrnds,        tol_csh) .and. &
+             urbanxx_softfail_permits(err_cgrndl,        tol_cev)) then
             write(iulog,*) '  URBANxx check failure permitted to continue: all exceedances (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
          else
             call exit(0)
@@ -273,17 +279,20 @@ contains
 
    max_error = 0._r8
    max_rel_error = 0._r8
+   max_ratio = 0._r8
    do fl = 1, num_urbanl
       l = filter_urbanl(fl)
       max_error     = max(max_error,     abs(lun_es%taf(l) - taf(fl)))
       max_error     = max(max_error,     abs(lun_ws%qaf(l) - qaf(fl)))
+      max_ratio     = max(max_ratio, abs(lun_es%taf(l) - taf(fl)) / urbanxx_lun_tol(l, 1.0e-10_r8, TOL_PHYS_TEMP), &
+                                     abs(lun_ws%qaf(l) - qaf(fl)) / urbanxx_lun_tol(l, 1.0e-10_r8, TOL_PHYS_QAF))
       max_rel_error = max(max_rel_error, abs(lun_es%taf(l) - taf(fl)) / max(abs(lun_es%taf(l)), 1.0e-20_r8))
       max_rel_error = max(max_rel_error, abs(lun_ws%qaf(l) - qaf(fl)) / max(abs(lun_ws%qaf(l)), 1.0e-20_r8))
    end do
    write(iulog,*) 'Max error in surface Taf, Qaf       : ', max_error,    ' (rel: ', max_rel_error, ')'
-   if (max_error > 1.0e-10) then
+   if (max_ratio > 1._r8) then
       write(iulog,*) 'Error exceeds tolerance! Check Urban++ surface Taf/Qaf computation.'
-      if (urbanxx_softfail_permits(max_error, 1.0e-10_r8)) then
+      if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
          write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
       else
          call exit(0)

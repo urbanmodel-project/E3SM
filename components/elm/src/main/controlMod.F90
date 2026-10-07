@@ -317,7 +317,8 @@ contains
     namelist /elm_inparm/ use_var_soil_thick, use_lake_wat_storage
 
     namelist /elm_inparm/ use_urbanxx, urbanxx_softfail, &
-         urbanxx_softfail_ceiling_factor, urbanxx_always_continue, urbanxx_output
+         urbanxx_softfail_ceiling_factor, urbanxx_always_continue, urbanxx_output, &
+         urbanxx_drift_tolerance
 
     namelist /elm_inparm/ &
          use_vsfm, vsfm_satfunc_type, vsfm_use_dynamic_linesearch, &
@@ -1000,6 +1001,7 @@ contains
     call mpi_bcast (urbanxx_softfail, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (urbanxx_softfail_ceiling_factor, 1, MPI_REAL8, 0, mpicom, ier)
     call mpi_bcast (urbanxx_always_continue, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (urbanxx_drift_tolerance, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (urbanxx_output, 1, MPI_LOGICAL, 0, mpicom, ier)
 
     ! VSFM variable

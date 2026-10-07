@@ -33,7 +33,8 @@ module UrbanxxSnowWaterMod
   use abortutils         , only : endrun
   use UrbanxxInstanceMod , only : urbanxx
   use UrbanxxSnowLayerMod, only : PackLayerQuantity, max_snow_layers
-  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+  use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_packed_tol, &
+       TOL_PHYS_TEMP, TOL_PHYS_SNOW_WATER, TOL_PHYS_SNOW_DZ
 
   implicit none
 
@@ -111,7 +112,7 @@ contains
   end subroutine urbanxx_snowWater
 
   !-----------------------------------------------------------------------
-  subroutine CheckOneLayerQuantity(label, urbanxx_buf, elm_buf, n, tol)
+  subroutine CheckOneLayerQuantity(label, urbanxx_buf, elm_buf, n, tol, tolv)
     !
     ! !DESCRIPTION:
     ! Compare URBANxx's evolved snow-layer state against ELM's own
@@ -125,18 +126,21 @@ contains
     real(r8)        , intent(in) :: elm_buf(:)
     integer          , intent(in) :: n
     real(r8)        , intent(in) :: tol
+    real(r8)        , intent(in) :: tolv(:)   ! per-element tolerance (two-tier)
 
     integer :: i
-    real(r8) :: max_err
+    real(r8) :: max_err, max_ratio
 
     max_err = 0._r8
+    max_ratio = 0._r8
     do i = 1, n
       max_err = max(max_err, abs(real(urbanxx_buf(i), r8) - elm_buf(i)))
+      max_ratio = max(max_ratio, abs(real(urbanxx_buf(i), r8) - elm_buf(i)) / tolv(i))
     end do
-    if (max_err > tol) then
+    if (max_ratio > 1._r8) then
       write(iulog,'(A,A,A,ES24.16)') 'ERROR: UrbanxxSnowWaterMod mismatch for ', &
            trim(label), ', max_err = ', max_err
-      if (urbanxx_softfail_permits(max_err, tol)) then
+      if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
         write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
       else
         call endrun(msg='UrbanxxSnowWaterMod: SnowWater physics-parity check failed for '//trim(label))
@@ -171,11 +175,19 @@ contains
     integer(c_int) :: status
     integer(c_int), dimension(2) :: size2D
     integer :: n
+    real(r8), allocatable :: tolT(:), tolW(:), tolZ(:)
 
     isLayoutLeft = UrbanKokkosIsLayoutLeft()
     size2D(1) = num_urbanl
     size2D(2) = max_snow_layers
     n = num_urbanl * max_snow_layers
+    allocate(tolT(n), tolW(n), tolZ(n))
+    call urbanxx_packed_tol(num_urbanc, filter_urbanc, num_urbanl, max_snow_layers, &
+         isLayoutLeft, 1.0e-9_r8, TOL_PHYS_TEMP, tolT)
+    call urbanxx_packed_tol(num_urbanc, filter_urbanc, num_urbanl, max_snow_layers, &
+         isLayoutLeft, 1.0e-9_r8, TOL_PHYS_SNOW_WATER, tolW)
+    call urbanxx_packed_tol(num_urbanc, filter_urbanc, num_urbanl, max_snow_layers, &
+         isLayoutLeft, 1.0e-12_r8, TOL_PHYS_SNOW_DZ, tolZ)
 
     allocate(urbanxx_roof(n)); allocate(urbanxx_improad(n)); allocate(urbanxx_perroad(n))
     allocate(elm_roof(n)); allocate(elm_improad(n)); allocate(elm_perroad(n))
@@ -190,9 +202,9 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     call PackLayerQuantity(num_urbanc, filter_urbanc, num_urbanl, begc, &
          col_ws%h2osoi_liq, isLayoutLeft, elm_roof, elm_improad, elm_perroad)
-    call CheckOneLayerQuantity('SnowLayerLiquidWaterRoof', urbanxx_roof, elm_roof, n, 1.0e-9_r8)
-    call CheckOneLayerQuantity('SnowLayerLiquidWaterImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-9_r8)
-    call CheckOneLayerQuantity('SnowLayerLiquidWaterPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-9_r8)
+    call CheckOneLayerQuantity('SnowLayerLiquidWaterRoof', urbanxx_roof, elm_roof, n, 1.0e-9_r8, tolW)
+    call CheckOneLayerQuantity('SnowLayerLiquidWaterImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-9_r8, tolW)
+    call CheckOneLayerQuantity('SnowLayerLiquidWaterPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-9_r8, tolW)
 
     call UrbanGetSnowLayerIceContentRoof(urbanxx, c_loc(urbanxx_roof), size2D, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
@@ -202,9 +214,9 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     call PackLayerQuantity(num_urbanc, filter_urbanc, num_urbanl, begc, &
          col_ws%h2osoi_ice, isLayoutLeft, elm_roof, elm_improad, elm_perroad)
-    call CheckOneLayerQuantity('SnowLayerIceContentRoof', urbanxx_roof, elm_roof, n, 1.0e-9_r8)
-    call CheckOneLayerQuantity('SnowLayerIceContentImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-9_r8)
-    call CheckOneLayerQuantity('SnowLayerIceContentPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-9_r8)
+    call CheckOneLayerQuantity('SnowLayerIceContentRoof', urbanxx_roof, elm_roof, n, 1.0e-9_r8, tolW)
+    call CheckOneLayerQuantity('SnowLayerIceContentImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-9_r8, tolW)
+    call CheckOneLayerQuantity('SnowLayerIceContentPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-9_r8, tolW)
 
     ! Thickness: much smaller magnitude (meters), tighter absolute tolerance.
     call UrbanGetSnowLayerThicknessRoof(urbanxx, c_loc(urbanxx_roof), size2D, status)
@@ -215,9 +227,9 @@ contains
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     call PackLayerQuantity(num_urbanc, filter_urbanc, num_urbanl, begc, &
          col_pp%dz, isLayoutLeft, elm_roof, elm_improad, elm_perroad)
-    call CheckOneLayerQuantity('SnowLayerThicknessRoof', urbanxx_roof, elm_roof, n, 1.0e-12_r8)
-    call CheckOneLayerQuantity('SnowLayerThicknessImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-12_r8)
-    call CheckOneLayerQuantity('SnowLayerThicknessPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-12_r8)
+    call CheckOneLayerQuantity('SnowLayerThicknessRoof', urbanxx_roof, elm_roof, n, 1.0e-12_r8, tolZ)
+    call CheckOneLayerQuantity('SnowLayerThicknessImperviousRoad', urbanxx_improad, elm_improad, n, 1.0e-12_r8, tolZ)
+    call CheckOneLayerQuantity('SnowLayerThicknessPerviousRoad', urbanxx_perroad, elm_perroad, n, 1.0e-12_r8, tolZ)
 
     deallocate(urbanxx_roof, urbanxx_improad, urbanxx_perroad)
     deallocate(elm_roof, elm_improad, elm_perroad)

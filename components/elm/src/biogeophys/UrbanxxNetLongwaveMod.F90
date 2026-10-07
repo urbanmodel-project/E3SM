@@ -110,7 +110,8 @@ contains
     !
     use column_varcon       , only : icol_road_perv, icol_road_imperv
     use column_varcon       , only : icol_roof, icol_sunwall, icol_shadewall
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_lun_tol, &
+         TOL_PHYS_ENERGY_FLUX
     !
     implicit none
     !
@@ -122,7 +123,7 @@ contains
     !
     integer                              :: fl, l, c_start, c_end, c, p, p_start, p_end
     integer(c_int)                       :: status
-   real(r8)                             :: max_error, max_rel_error
+   real(r8)                             :: max_error, max_rel_error, max_ratio, lun_max
    integer                              :: p_max_error, c_max_error, p_max_rel_error, c_max_rel_error
 
     associate(                       &
@@ -195,10 +196,12 @@ contains
       c_max_error     = -1
       p_max_rel_error = -1
       c_max_rel_error = -1
+      max_ratio       = 0._r8
       do fl = 1, num_urbanl
          l = filter_urbanl(fl)
          p_start = lun_pp%pfti(l)
          p_end   = lun_pp%pftf(l)
+         lun_max = 0._r8
 
          do p = p_start, p_end
             c = veg_pp%column(p)
@@ -224,14 +227,33 @@ contains
                call update_max_error_tracker(veg_ef%eflx_lwrad_net(p),   lwnet_improad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
                call update_max_error_tracker(veg_ef%eflx_lwrad_net_u(p), lwnet_improad(fl),  p, c, max_error, max_rel_error, p_max_error, c_max_error, p_max_rel_error, c_max_rel_error)
             end select
+            ! Per-landunit worst error, for the landunit's tolerance tier.
+            select case (ctype(c))
+            case (icol_roof)
+               lun_max = max(lun_max, abs(veg_ef%eflx_lwrad_out(p) - lwup_roof(fl)), &
+                    abs(veg_ef%eflx_lwrad_net(p) - lwnet_roof(fl)), abs(veg_ef%eflx_lwrad_net_u(p) - lwnet_roof(fl)))
+            case (icol_sunwall)
+               lun_max = max(lun_max, abs(veg_ef%eflx_lwrad_out(p) - lwup_sunwall(fl)), &
+                    abs(veg_ef%eflx_lwrad_net(p) - lwnet_sunwall(fl)), abs(veg_ef%eflx_lwrad_net_u(p) - lwnet_sunwall(fl)))
+            case (icol_shadewall)
+               lun_max = max(lun_max, abs(veg_ef%eflx_lwrad_out(p) - lwup_shadwall(fl)), &
+                    abs(veg_ef%eflx_lwrad_net(p) - lwnet_shadwall(fl)), abs(veg_ef%eflx_lwrad_net_u(p) - lwnet_shadwall(fl)))
+            case (icol_road_perv)
+               lun_max = max(lun_max, abs(veg_ef%eflx_lwrad_out(p) - lwup_perroad(fl)), &
+                    abs(veg_ef%eflx_lwrad_net(p) - lwnet_perroad(fl)), abs(veg_ef%eflx_lwrad_net_u(p) - lwnet_perroad(fl)))
+            case (icol_road_imperv)
+               lun_max = max(lun_max, abs(veg_ef%eflx_lwrad_out(p) - lwup_improad(fl)), &
+                    abs(veg_ef%eflx_lwrad_net(p) - lwnet_improad(fl)), abs(veg_ef%eflx_lwrad_net_u(p) - lwnet_improad(fl)))
+            end select
          end do
+         max_ratio = max(max_ratio, lun_max / urbanxx_lun_tol(l, 1.0e-10_r8, TOL_PHYS_ENERGY_FLUX))
       end do
       write(iulog,*) 'Max error in longwave fluxes        : ', max_error, ' (rel: ', max_rel_error, ')'
           write(iulog,*) 'Max abs error location              : p=', p_max_error, ' c=', c_max_error,'column type=', ctype(c_max_error)
           write(iulog,*) 'Max rel error location              : p=', p_max_rel_error, ' c=', c_max_rel_error,'column type=', ctype(c_max_rel_error)
-      if (max_error > 1.0e-10) then
+      if (max_ratio > 1._r8) then
          write(iulog,*) 'Error exceeds tolerance! Check Urban++ net longwave computation.'
-         if (urbanxx_softfail_permits(max_error, 1.0e-10_r8)) then
+         if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
             write(iulog,*) '  URBANxx check failure permitted to continue (urbanxx_softfail/urbanxx_always_continue); logging and continuing'
          else
             call exit(0)

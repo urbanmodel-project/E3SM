@@ -115,7 +115,8 @@ contains
     use column_varcon     , only : icol_road_perv
     use abortutils        , only : endrun
     use shr_log_mod       , only : errmsg => shr_log_errmsg
-    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits
+    use UrbanxxDiagnosticControlMod, only : urbanxx_softfail_permits, urbanxx_col_tol, &
+         TOL_PHYS_WATER_FLUX
     !
     implicit none
     !
@@ -125,7 +126,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer  :: fc, c, idx_perv
-    real(r8) :: max_abs_err, max_rel_err, abs_err
+    real(r8) :: max_abs_err, max_rel_err, abs_err, max_ratio
 
     ! Tolerance for endrun
     real(r8), parameter :: tol = 1.0e-6_r8
@@ -137,6 +138,7 @@ contains
 
       ! --- qflx_drain ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       idx_perv = 0
       do fc = 1, num_urbanc
@@ -145,6 +147,7 @@ contains
           idx_perv = idx_perv + 1
           abs_err = abs(qflx_drain(c) - out_qflx_drain(idx_perv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_WATER_FLUX))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(qflx_drain(c)), 1.0e-20_r8))
         end if
@@ -153,8 +156,8 @@ contains
          write(iulog,*) 'Max error in qflx_drain             :', &
              max_abs_err, '  (rel:', max_rel_err, ')'
       end if
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: qflx_drain error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun( &
@@ -165,6 +168,7 @@ contains
 
       ! --- qflx_rsub_sat ---
       max_abs_err = 0._r8
+      max_ratio = 0._r8
       max_rel_err = 0._r8
       idx_perv = 0
       do fc = 1, num_urbanc
@@ -173,6 +177,7 @@ contains
           idx_perv = idx_perv + 1
           abs_err = abs(qflx_rsub_sat(c) - out_qflx_rsub_sat(idx_perv))
           max_abs_err = max(max_abs_err, abs_err)
+          max_ratio = max(max_ratio, abs_err / urbanxx_col_tol(c, tol, TOL_PHYS_WATER_FLUX))
           max_rel_err = max(max_rel_err, &
                abs_err / max(abs(qflx_rsub_sat(c)), 1.0e-20_r8))
         end if
@@ -181,8 +186,8 @@ contains
         write(iulog,*) 'Max error in qflx_rsub_sat           :', &
              max_abs_err, '  (rel:', max_rel_err, ')'
       end if
-      if (max_abs_err > tol) then
-        if (urbanxx_softfail_permits(max_abs_err, tol)) then
+      if (max_ratio > 1._r8) then
+        if (urbanxx_softfail_permits(max_ratio, 1._r8)) then
           write(iulog,*) '  URBANxx check failure permitted to continue: qflx_rsub_sat error exceeds tolerance (urbanxx_softfail/urbanxx_always_continue); continuing'
         else
           call endrun( &
