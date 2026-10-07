@@ -153,7 +153,7 @@ contains
     ! Packed in filter_urbanl order (URBANxx's landunit index).
     !
     use ColumnType     , only : col_pp
-    use ColumnDataType , only : col_ws
+    use ColumnDataType , only : col_ws, col_wf
     use column_varcon  , only : icol_roof, icol_road_imperv, icol_road_perv
     !
     implicit none
@@ -168,11 +168,12 @@ contains
     integer                              :: fl, l, fc, c, k
     integer, parameter                   :: nsurf = 3
     integer                              :: ctype(nsurf)
-    real(c_double), allocatable, target  :: h2osno(:,:), sdepth(:,:), fsno(:,:), isno(:,:)
+    real(c_double), allocatable, target  :: h2osno(:,:), sdepth(:,:), fsno(:,:), isno(:,:), smelt(:,:)
 
     ctype = (/ icol_roof, icol_road_imperv, icol_road_perv /)
     allocate(h2osno(num_urbanl,nsurf), sdepth(num_urbanl,nsurf), fsno(num_urbanl,nsurf), isno(num_urbanl,nsurf))
-    h2osno = 0._c_double; sdepth = 0._c_double; fsno = 0._c_double; isno = 0._c_double
+    allocate(smelt(num_urbanl,nsurf))
+    h2osno = 0._c_double; sdepth = 0._c_double; fsno = 0._c_double; isno = 0._c_double; smelt = 0._c_double
 
     do fl = 1, num_urbanl
        l = filter_urbanl(fl)
@@ -186,25 +187,26 @@ contains
                 sdepth(fl,k) = real(merge(col_ws%snow_depth(c), 0._r8, abs(col_ws%snow_depth(c)) < 1.e30_r8), c_double)
                 fsno  (fl,k) = real(merge(col_ws%frac_sno(c)  , 0._r8, abs(col_ws%frac_sno(c))   < 1.e30_r8), c_double)
                 isno  (fl,k) = real(merge(col_ws%int_snow(c)  , 0._r8, abs(col_ws%int_snow(c))   < 1.e30_r8), c_double)
+                smelt (fl,k) = real(merge(col_wf%qflx_snow_melt(c), 0._r8, abs(col_wf%qflx_snow_melt(c)) < 1.e30_r8), c_double)
              end if
           end do
        end do
     end do
 
     call UrbanSetSnowCoverStateRoof(urban, c_loc(h2osno(1,1)), c_loc(sdepth(1,1)), &
-         c_loc(fsno(1,1)), c_loc(isno(1,1)), num_urbanl, status)
+         c_loc(fsno(1,1)), c_loc(isno(1,1)), c_loc(smelt(1,1)), num_urbanl, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     call UrbanSetSnowCoverStateImperviousRoad(urban, c_loc(h2osno(1,2)), c_loc(sdepth(1,2)), &
-         c_loc(fsno(1,2)), c_loc(isno(1,2)), num_urbanl, status)
+         c_loc(fsno(1,2)), c_loc(isno(1,2)), c_loc(smelt(1,2)), num_urbanl, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
     call UrbanSetSnowCoverStatePerviousRoad(urban, c_loc(h2osno(1,3)), c_loc(sdepth(1,3)), &
-         c_loc(fsno(1,3)), c_loc(isno(1,3)), num_urbanl, status)
+         c_loc(fsno(1,3)), c_loc(isno(1,3)), c_loc(smelt(1,3)), num_urbanl, status)
     if (status /= URBAN_SUCCESS) call UrbanError(iam, __LINE__, status)
 
-    deallocate(h2osno, sdepth, fsno, isno)
+    deallocate(h2osno, sdepth, fsno, isno, smelt)
 
     if (masterproc) then
-       write(iulog,*) 'Seeded snow-cover state (H2OSno, SnowDepth, FracSno, IntSno) from ELM data'
+       write(iulog,*) 'Seeded snow-cover state (H2OSno, SnowDepth, FracSno, IntSno, previous-step snow melt) from ELM data'
     end if
 
   end subroutine SetSnowCoverStateFromState
